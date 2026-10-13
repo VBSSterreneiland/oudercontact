@@ -30,7 +30,7 @@ const cfgFb={apiKey:"AIzaSyBynXKGd1IAoGPohX_uKN0lkyh6qIlOXyk",authDomain:"ouderc
 const ADMIN_UID="yCsN916cFEhgwdsTHWjZgklOEpJ2";
 const app=initializeApp(cfgFb),auth=getAuth(app),db=getFirestore(app);
 const secAuth=getAuth(initializeApp(cfgFb,'sec'));
-let me=null,tab='ouder',msg='',cfg=null,slots={},priv={},bk=null,tlist=[],unsubs=[],atab='dagen',q='',kf='',sel=new Set(),stu=[],apps=[];
+let me=null,tab='ouder',msg='',cfg=null,slots={},priv={},bk={},tlist=[],unsubs=[],atab='dagen',q='',kf='',sel=new Set(),stu=[],apps=[];
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
 const K=s=>String(s).trim().toUpperCase(),mail=(n,i=0)=>norm(n).replace(/[^a-z0-9]+/g,'.').replace(/^\.|\.$/g,'')+(i?'-'+i:'')+'@oudercontact.school';
@@ -39,41 +39,42 @@ const mins=t=>{const[h,m]=t.split(':').map(Number);return h*60+m},hm=n=>String(M
 const times=()=>{const r=[];for(let n=mins(cfg.start);n<mins(cfg.end);n+=15)r.push(hm(n));return r};
 const dl=d=>new Date(d+'T12:00').toLocaleDateString('nl-BE',{weekday:'short',day:'numeric',month:'short'});
 const sid=(t,d,h)=>t+'_'+d+'_'+h.replace(':','');
+const parseKl=x=>[...new Set(String(x||'').split(/[\/+&,]/).map(K).filter(Boolean))],kls=t=>t.klassen||[t.klas],kl=t=>kls(t).join('/');
 const errT=e=>({'auth/invalid-credential':'Gegevens kloppen niet.','auth/email-already-in-use':'bestaat al','permission-denied':'Niet toegestaan (is dit kwartier net bezet, of heb je al een afspraak? Annuleer die eerst.)'}[e.code]||e.message);
 function parseCSV(t,n){const L=t.split(/\r?\n/).filter(l=>l.trim());if(!L.length)return[];const sep=L[0].includes(';')?';':',';const r=L.map(l=>l.split(sep).map(x=>x.trim().replace(/^"|"$/g,'')));if(/^(voor)?naam$/i.test(r[0][0]))r.shift();return r.filter(x=>x.length>=n&&x[0])}
 function stop(){unsubs.forEach(u=>u());unsubs=[]}
-function start(tid){stop();
+function start(tids=[]){stop();
  unsubs.push(onSnapshot(doc(db,'config','main'),s=>{cfg=s.exists()?s.data():null;render()}));
- if(tid)unsubs.push(onSnapshot(query(collection(db,'slots'),where('tid','==',tid)),s=>{slots={};s.forEach(d=>slots[d.id]=d.data().status);render()}));
- if(me.role==='leerkracht')unsubs.push(onSnapshot(query(collection(db,'private'),where('tid','==',tid)),s=>{priv={};s.forEach(d=>priv[d.id]=d.data().name);render()}));
- if(me.role==='ouder')unsubs.push(onSnapshot(doc(db,'bookings',me.h+'_'+tid),s=>{bk=s.exists()?s.data().slot:null;render()}));}
+ if(tids.length)unsubs.push(onSnapshot(query(collection(db,'slots'),where('tid','in',tids)),s=>{slots={};s.forEach(d=>slots[d.id]=d.data().status);render()}));
+ if(me.role==='leerkracht')unsubs.push(onSnapshot(query(collection(db,'private'),where('tid','==',me.uid)),s=>{priv={};s.forEach(d=>priv[d.id]=d.data().name);render()}));
+ if(me.role==='ouder')tids.forEach(t=>unsubs.push(onSnapshot(doc(db,'bookings',me.h+'_'+t),s=>{s.exists()?bk[t]=s.data().slot:delete bk[t];render()})))}
 function grid(tid,mode){const days=cfg.days.filter(x=>x.open),T=times();if(!days.length)return'<p class="mu">Er zijn nog geen dagen open.</p>';
  let h='<div class="grid"><table><tr><th></th>'+days.map(x=>'<th>'+dl(x.d)+(mode==='leerkracht'?`<br><button class="c off" style="padding:2px 6px;margin-top:3px" data-a="day" data-d="${x.d}">hele dag ⇄</button>`:'')+'</th>').join('')+'</tr>';
  for(const tm of T){h+='<tr><td class="t">'+tm+'</td>';for(const x of days){const k=sid(tid,x.d,tm),st=slots[k];let c;
   if(mode==='leerkracht')c=st==='booked'?`<button class="c mine" disabled>${esc(priv[k]||'bezet')}</button>`:`<button class="c ${st?'off':'free'}" data-a="tog" data-k="${k}" data-st="${st||''}">${st?'✗ past niet':'✓ open'}</button>`;
-  else c=bk===k?`<button class="c mine" data-a="cancel" data-k="${k}">Jouw afspraak ✕</button>`:st==='booked'?'<button class="c taken" disabled>Bezet</button>':st?'<span class="mu">–</span>':`<button class="c free" data-a="book" data-k="${k}">Vrij</button>`;
+  else c=bk[tid]===k?`<button class="c mine" data-a="cancel" data-k="${k}">Jouw afspraak ✕</button>`:st==='booked'?'<button class="c taken" disabled>Bezet</button>':st?'<span class="mu">–</span>':`<button class="c free" data-a="book" data-k="${k}">Vrij</button>`;
   h+='<td>'+c+'</td>'}h+='</tr>'}return h+'</table></div>'}
 function login(){const f={ouder:`<label>Voornaam kind<input id="v" autocomplete="off"></label><label>Achternaam kind<input id="a" autocomplete="off"></label>`,
  leerkracht:`<label>Naam<input id="v"></label><label>Wachtwoord<input id="p" type="password"></label>`,
  beheerder:`<label>E-mailadres<input id="v" type="email"></label><label>Wachtwoord<input id="p" type="password"></label>`}[tab];
  return`<div class="card" style="max-width:420px;margin:30px auto"><h2 style="margin-top:0">Inloggen</h2><div class="tabs">${['ouder','leerkracht','beheerder'].map(t=>`<button class="${t===tab?'on':''}" data-a="tab" data-t="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div>${f}<button class="pr" data-a="login">Inloggen</button><p class="err">${esc(msg)}</p></div>`}
-function ouder(){return`<div class="card"><h2 style="margin-top:0">Hallo ouder van ${esc(me.v)} ${esc(me.a)}</h2>${!me.cls?'<p class="err">Voor deze klas is nog geen leerkracht ingesteld.</p>':!cfg?'<p class="mu">De inschrijvingen zijn nog niet open.</p>':`<p class="mu">Klas ${esc(me.klas)} · ${esc(me.cls.naam)}. Klik op een groen vakje (15 minuten) om te reserveren. Je afspraak kan je annuleren.</p><p class="err">${esc(msg)}</p>`+grid(me.cls.uid,'ouder')}</div>`}
-function leerkracht(){return`<div class="card"><h2 style="margin-top:0">${esc(me.naam)} · klas ${esc(me.klas)} <button data-a="pw" style="float:right;font-size:13px">Wachtwoord wijzigen</button></h2><p class="err">${esc(msg)}</p>${!cfg?'<p class="mu">De beheerder heeft nog geen dagen ingesteld.</p>':'<p class="mu">Klik op een vakje om het kwartier open (✓) of niet beschikbaar (✗) te zetten. Ingeschreven kinderen zie je met naam.</p>'+grid(me.uid,'leerkracht')}</div>`}
+function ouder(){return`<div class="card"><h2 style="margin-top:0">Hallo ouder van ${esc(me.v)} ${esc(me.a)}</h2>${!me.teachers.length?'<p class="err">Voor deze klas is nog geen leerkracht ingesteld.</p>':!cfg?'<p class="mu">De inschrijvingen zijn nog niet open.</p>':`<p class="mu">Klik op een groen vakje (15 minuten) om te reserveren. Je kan bij elke leerkracht één afspraak maken en die annuleren.</p><p class="err">${esc(msg)}</p>`}</div>`+(cfg?me.teachers.map(t=>`<div class="card"><h3 style="margin-top:0">${esc(t.naam)} · ${esc(t.kl.join('/'))}</h3>${grid(t.uid,'ouder')}</div>`).join(''):'')}
+function leerkracht(){return`<div class="card"><h2 style="margin-top:0">${esc(me.naam)} · klas ${esc(kl(me))} <button data-a="pw" style="float:right;font-size:13px">Wachtwoord wijzigen</button></h2><p class="err">${esc(msg)}</p>${!cfg?'<p class="mu">De beheerder heeft nog geen dagen ingesteld.</p>':'<p class="mu">Klik op een vakje om het kwartier open (✓) of niet beschikbaar (✗) te zetten. Ingeschreven kinderen zie je met naam.</p>'+grid(me.uid,'leerkracht')}</div>`}
 const AT=[['dagen','Dagen & uren'],['leer','Leerkrachten'],['leerl','Leerlingen'],['afs','Afspraken']];
 const cb='style="width:auto;margin:0"';
-function studList(){const L=flt();return`<table><tr><th><input type="checkbox" data-a="selall" ${cb}></th><th>Voornaam</th><th>Achternaam</th><th>Klas</th><th></th></tr>`+L.map(s=>`<tr><td><input type="checkbox" data-a="sel" data-id="${s.id}" ${sel.has(s.id)?'checked':''} ${cb}></td><td>${esc(s.v)}</td><td>${esc(s.a)}</td><td>${esc(s.klas)}</td><td><button data-a="sedit" data-id="${s.id}">✎</button> <button data-a="sdel" data-id="${s.id}">✕</button></td></tr>`).join('')+'</table>'+(L.length?'':'<p class="mu">Geen leerlingen.</p>')}
-function beheerder(){const c=cfg||{days:[],start:'16:00',end:'19:00'},ks=[...new Set(stu.map(s=>s.klas))].sort();
+function studList(){const L=flt();return`<table><tr><th><input type="checkbox" data-a="selall" ${cb}></th><th>Voornaam</th><th>Achternaam</th><th>Klas</th><th></th></tr>`+L.map(s=>`<tr><td><input type="checkbox" data-a="sel" data-id="${s.id}" ${sel.has(s.id)?'checked':''} ${cb}></td><td>${esc(s.v)}</td><td>${esc(s.a)}</td><td>${esc(kls(s).join('/'))}</td><td><button data-a="sedit" data-id="${s.id}">✎</button> <button data-a="sdel" data-id="${s.id}">✕</button></td></tr>`).join('')+'</table>'+(L.length?'':'<p class="mu">Geen leerlingen.</p>')}
+function beheerder(){const c=cfg||{days:[],start:'16:00',end:'19:00'},ks=[...new Set(stu.flatMap(kls))].sort();
  const bar=`<div class="tabs">${AT.map(([k,n])=>`<button class="${k===atab?'on':''}" data-a="atab" data-t="${k}">${n}</button>`).join('')}</div>`+(msg?`<p><b>${esc(msg)}</b></p>`:'');
  const T={
  dagen:`<div class="card"><h3 style="margin-top:0">Dagen & uren</h3>${c.days.map((x,i)=>`<div class="row"><b>${dl(x.d)}</b><label><input type="checkbox" ${x.open?'checked':''} data-a="dayopen" data-i="${i}" ${cb}> open voor inschrijving</label><button data-a="daydel" data-i="${i}">Verwijder</button></div>`).join('')}
  <div class="row"><input type="date" id="nd"><button data-a="dayadd">Dag toevoegen</button></div>
  <div class="row">Van <input type="time" id="st" value="${c.start}" step="900"> tot <input type="time" id="en" value="${c.end}" step="900"><button data-a="hours">Uren opslaan</button></div></div>`,
- leer:`<div class="card"><h3 style="margin-top:0">Leerkracht toevoegen</h3><div class="row"><input id="tn" placeholder="Naam (bv. Juf Els)"><input id="tp" placeholder="Wachtwoord (min. 6)"><input id="tk" placeholder="Klas" style="width:90px"><button class="pr" data-a="tadd">Toevoegen</button></div></div>
- <div class="card"><h3 style="margin-top:0">Leerkrachten (${tlist.length})</h3><div class="grid"><table><tr><th>Naam</th><th>Klas</th><th></th></tr>${tlist.map(t=>`<tr><td>${esc(t.naam)}</td><td>${esc(t.klas)}</td><td><button data-a="tedit" data-id="${t.id}">Klas wijzigen</button> <button data-a="tpw" data-id="${t.id}">Nieuw wachtwoord</button> <button data-a="tdel" data-id="${t.id}">✕</button></td></tr>`).join('')}</table></div>
+ leer:`<div class="card"><h3 style="margin-top:0">Leerkracht toevoegen</h3><div class="row"><input id="tn" placeholder="Naam (bv. Juf Els)"><input id="tp" placeholder="Wachtwoord (min. 6)"><input id="tk" placeholder="Klas (5A/6A)" style="width:130px"><button class="pr" data-a="tadd">Toevoegen</button></div></div>
+ <div class="card"><h3 style="margin-top:0">Leerkrachten (${tlist.length})</h3><div class="grid"><table><tr><th>Naam</th><th>Klas</th><th></th></tr>${tlist.map(t=>`<tr><td>${esc(t.naam)}</td><td>${esc(kl(t))}</td><td><button data-a="tedit" data-id="${t.id}">Klassen wijzigen</button> <button data-a="tpw" data-id="${t.id}">Nieuw wachtwoord</button> <button data-a="tdel" data-id="${t.id}">✕</button></td></tr>`).join('')}</table></div>
  <p class="mu">Nieuw wachtwoord of verwijderen wist de kalender en afspraken van die leerkracht. Leerkrachten kunnen hun wachtwoord zelf wijzigen na het inloggen.</p></div>
- <div class="card"><h3 style="margin-top:0">Importeren (CSV)</h3><p class="mu"><code>naam;wachtwoord;klas</code></p><input type="file" accept=".csv,.txt" data-a="csvT"></div>`,
- leerl:`<div class="card"><h3 style="margin-top:0">Leerling toevoegen</h3><div class="row"><input id="sv" placeholder="Voornaam"><input id="sa" placeholder="Achternaam"><input id="sk" placeholder="Klas" style="width:90px"><button class="pr" data-a="sadd">Toevoegen</button></div>
- <p class="mu">Importeren (CSV): <code>voornaam;achternaam;klas</code></p><input type="file" accept=".csv,.txt" data-a="csvS"></div>
+ <div class="card"><h3 style="margin-top:0">Importeren (CSV)</h3><p class="mu"><code>naam;wachtwoord;klas</code> (meerdere klassen: <code>5A/6A</code>)</p><input type="file" accept=".csv,.txt" data-a="csvT"></div>`,
+ leerl:`<div class="card"><h3 style="margin-top:0">Leerling toevoegen</h3><div class="row"><input id="sv" placeholder="Voornaam"><input id="sa" placeholder="Achternaam"><input id="sk" placeholder="Klas (5A/6A)" style="width:130px"><button class="pr" data-a="sadd">Toevoegen</button></div>
+ <p class="mu">Importeren (CSV): <code>voornaam;achternaam;klas</code> (in twee klassen: <code>5A/6A</code>)</p><input type="file" accept=".csv,.txt" data-a="csvS"></div>
  <div class="card"><h3 style="margin-top:0">Leerlingen (${stu.length})</h3><div class="row"><input id="q" placeholder="Zoeken…" value="${esc(q)}" data-a="q" style="width:160px"><select id="kf" data-a="kf"><option value="">Alle klassen</option>${ks.map(k=>`<option ${k===kf?'selected':''}>${esc(k)}</option>`).join('')}</select>
  <button data-a="sdelsel">Verwijder geselecteerde (${sel.size})</button>${kf?`<button data-a="sdelklas">Verwijder klas ${esc(kf)}</button>`:''}<button data-a="sdelall">Alles verwijderen</button></div><div class="grid" id="sl">${studList()}</div></div>`,
  afs:`<div class="card"><h3 style="margin-top:0">Afspraken (${apps.length})</h3><div class="row"><button data-a="aexp">Exporteer CSV</button><button data-a="aclear">Alle afspraken wissen</button></div>
@@ -83,41 +84,44 @@ function beheerder(){const c=cfg||{days:[],start:'16:00',end:'19:00'},ks=[...new
 function render(){$('#who').innerHTML=me?`${me.role} <button data-a="out">Uitloggen</button>`:'';
  $('#app').innerHTML=!me?login():me.role==='ouder'?ouder():me.role==='leerkracht'?leerkracht():beheerder()}
 const saveCfg=()=>setDoc(doc(db,'config','main'),cfg);
-const loadT=async()=>{tlist=(await getDocs(collection(db,'teachers'))).docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.klas.localeCompare(b.klas))};
+const loadT=async()=>{tlist=(await getDocs(collection(db,'teachers'))).docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>kl(a).localeCompare(kl(b)))};
 const loadS=async()=>{stu=(await getDocs(collection(db,'students'))).docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.klas+a.a+a.v).localeCompare(b.klas+b.a+b.v))};
 const loadA=async()=>{apps=(await getDocs(collection(db,'private'))).docs.map(d=>{const[tid,dd,h]=d.id.split('_');return{id:d.id,name:d.data().name,tid,student:d.data().student,d:dd,tm:h.slice(0,2)+':'+h.slice(2)}}).sort((a,b)=>(a.d+a.tm).localeCompare(b.d+b.tm))};
-const tname=id=>{const t=tlist.find(t=>t.id===id);return t?t.naam+' ('+t.klas+')':'?'};
+const tname=id=>{const t=tlist.find(t=>t.id===id);return t?t.naam+' ('+kl(t)+')':'?'};
 const hashOf=(v,a)=>sha(norm(v)+'|'+norm(a));
 const chunks=(a,n)=>{const r=[];for(let i=0;i<a.length;i+=n)r.push(a.slice(i,i+n));return r};
 async function delApp(a){const b=writeBatch(db);b.delete(doc(db,'slots',a.id));b.delete(doc(db,'private',a.id));b.delete(doc(db,'bookings',a.student+'_'+a.tid));await b.commit()}
 async function clearBk(h){const s=await getDocs(query(collection(db,'private'),where('student','==',h)));for(const d of s.docs)await delApp({id:d.id,student:h,tid:d.data().tid})}
 async function delS(ids){for(const h of ids)await clearBk(h);for(const c of chunks(ids,400)){const b=writeBatch(db);c.forEach(h=>b.delete(doc(db,'students',h)));await b.commit()}ids.forEach(h=>sel.delete(h));await loadS();msg=ids.length+' leerling(en) verwijderd.'}
+async function setCls(k,uid,naam,add){const r=doc(db,'classes',k),x=await getDoc(r);let L=x.exists()?(x.data().teachers||[]):[];L=L.filter(y=>y.uid!==uid);if(add)L.push({uid,naam});L.length?await setDoc(r,{teachers:L}):await deleteDoc(r)}
 async function wipeT(id){for(const c of['slots','private']){const s=await getDocs(query(collection(db,c),where('tid','==',id)));for(const ch of chunks(s.docs,150)){const b=writeBatch(db);ch.forEach(d=>{b.delete(d.ref);if(c==='private')b.delete(doc(db,'bookings',d.data().student+'_'+id))});await b.commit()}}}
-async function addTeacher(naam,pw,klas){if(tlist.some(t=>norm(t.naam)===norm(naam)))throw new Error(naam+' bestaat al');
- for(let i=0;i<6;i++){try{const c=await createUserWithEmailAndPassword(secAuth,mail(naam,i),pw);await signOut(secAuth);const u=c.user.uid;await setDoc(doc(db,'teachers',u),{naam,klas:K(klas)});await setDoc(doc(db,'classes',K(klas)),{uid:u,naam});return u}catch(e){if(e.code!=='auth/email-already-in-use')throw e}}throw new Error('Aanmaken mislukt')}
-async function dropT(t){await wipeT(t.id);await deleteDoc(doc(db,'teachers',t.id));const c=await getDoc(doc(db,'classes',t.klas));if(c.exists()&&c.data().uid===t.id)await deleteDoc(c.ref)}
-const flt=()=>stu.filter(s=>(!kf||s.klas===kf)&&(!q||norm(s.v+' '+s.a).includes(norm(q))));
+async function addTeacher(naam,pw,klas){if(!parseKl(klas).length)throw new Error('Geen klas');if(tlist.some(t=>norm(t.naam)===norm(naam)))throw new Error(naam+' bestaat al');
+ for(let i=0;i<6;i++){try{const c=await createUserWithEmailAndPassword(secAuth,mail(naam,i),pw);await signOut(secAuth);const u=c.user.uid;const ks=parseKl(klas);await setDoc(doc(db,'teachers',u),{naam,klassen:ks});for(const k of ks)await setCls(k,u,naam,true);return u}catch(e){if(e.code!=='auth/email-already-in-use')throw e}}throw new Error('Aanmaken mislukt')}
+async function dropT(t){await wipeT(t.id);await deleteDoc(doc(db,'teachers',t.id));for(const k of kls(t))await setCls(k,t.id,t.naam,false)}
+const flt=()=>stu.filter(s=>(!kf||kls(s).includes(kf))&&(!q||norm(s.v+' '+s.a).includes(norm(q))));
 async function doLogin(){const v=($('#v')||{}).value||'',p=($('#p')||{}).value||'',x=($('#a')||{}).value||'';
  if(tab==='ouder'){await signOut(auth);const u=(await signInAnonymously(auth)).user,h=await sha(norm(v)+'|'+norm(x));
   const s=await getDoc(doc(db,'students',h));if(!s.exists()){await signOut(auth);msg='Leerling niet gevonden. Controleer de schrijfwijze.';return}
-  await setDoc(doc(db,'claims',u.uid),{student:h});const d=s.data(),c=await getDoc(doc(db,'classes',d.klas));
-  me={role:'ouder',h,...d,cls:c.exists()?c.data():null};start(me.cls&&me.cls.uid)}
+  await setDoc(doc(db,'claims',u.uid),{student:h});const d=s.data(),tm={};for(const k of kls(d)){const c=await getDoc(doc(db,'classes',k));if(c.exists())(c.data().teachers||[]).forEach(x=>{(tm[x.uid]=tm[x.uid]||{uid:x.uid,naam:x.naam,kl:[]}).kl.push(k)})}
+  me={role:'ouder',h,...d,teachers:Object.values(tm)};bk={};start(me.teachers.map(t=>t.uid))}
  else if(tab==='leerkracht'){let u=null,t;for(let i=0;i<6&&!u;i++){try{const x=(await signInWithEmailAndPassword(auth,mail(v,i),p)).user,d=await getDoc(doc(db,'teachers',x.uid));if(d.exists()){u=x;t=d}else await signOut(auth)}catch(e){if(e.code!=='auth/invalid-credential'&&e.code!=='auth/user-not-found')throw e}}
-  if(!u){msg='Naam of wachtwoord klopt niet.';return}me={role:'leerkracht',uid:u.uid,...t.data()};start(u.uid)}
+  if(!u){msg='Naam of wachtwoord klopt niet.';return}me={role:'leerkracht',uid:u.uid,...t.data()};start([u.uid])}
  else{const u=(await signInWithEmailAndPassword(auth,v.trim(),p)).user;if(u.uid!==ADMIN_UID){await signOut(auth);msg='Geen beheerder.';return}
-  me={role:'beheerder'};await loadT();start(null)}}
+  me={role:'beheerder'};await loadT();start()}}
 async function importT(txt){const rows=parseCSV(txt,3);let ok=0,bad=[];
  for(const[naam,pw,klas]of rows){try{await addTeacher(naam,pw,klas);await loadT();ok++}catch(e){bad.push(naam+' ('+errT(e)+')')}}
  msg=ok+' leerkrachten toegevoegd.'+(bad.length?' Mislukt: '+bad.join(', '):'')}
 async function importS(txt){const rows=parseCSV(txt,3);for(const ch of chunks(rows,400)){const b=writeBatch(db);
- for(const[v,a,k]of ch)b.set(doc(db,'students',await hashOf(v,a)),{v,a,klas:K(k)});await b.commit()}await loadS();msg=rows.length+' leerlingen geïmporteerd.'}
+ for(const[v,a,k]of ch)b.set(doc(db,'students',await hashOf(v,a)),{v,a,klas:parseKl(k).join('/'),klassen:parseKl(k)});await b.commit()}await loadS();msg=rows.length+' leerlingen geïmporteerd.'}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]');if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;const a=b.dataset.a,k=b.dataset.k;
  try{if(a==='tab'){tab=b.dataset.t;msg=''}
- else if(a==='out'){stop();await signOut(auth);me=null;msg='';slots={};priv={};bk=null}
+ else if(a==='out'){stop();await signOut(auth);me=null;msg='';slots={};priv={};bk={}}
  else if(a==='login'){msg='';b.disabled=true;await doLogin()}
  else if(a==='tog'){b.disabled=true;b.dataset.st?await deleteDoc(doc(db,'slots',k)):await setDoc(doc(db,'slots',k),{status:'blocked',tid:me.uid})}
- else if(a==='book'){msg='';const bt=writeBatch(db);bt.set(doc(db,'slots',k),{status:'booked',tid:me.cls.uid});bt.set(doc(db,'private',k),{name:me.v+' '+me.a,tid:me.cls.uid,student:me.h});bt.set(doc(db,'bookings',me.h+'_'+me.cls.uid),{slot:k});await bt.commit()}
- else if(a==='cancel'){msg='';const bt=writeBatch(db);bt.delete(doc(db,'slots',k));bt.delete(doc(db,'private',k));bt.delete(doc(db,'bookings',me.h+'_'+me.cls.uid));await bt.commit()}
+ else if(a==='book'){msg='';const tid=k.split('_')[0],tt=k.split('_').slice(1).join('_');
+  if(Object.entries(bk).some(([o,x])=>o!==tid&&x.split('_').slice(1).join('_')===tt))msg='Je hebt op dat moment al een afspraak bij een andere leerkracht.';
+  else{const bt=writeBatch(db);bt.set(doc(db,'slots',k),{status:'booked',tid});bt.set(doc(db,'private',k),{name:me.v+' '+me.a,tid,student:me.h});bt.set(doc(db,'bookings',me.h+'_'+tid),{slot:k});await bt.commit()}}
+ else if(a==='cancel'){msg='';const tid=k.split('_')[0],bt=writeBatch(db);bt.delete(doc(db,'slots',k));bt.delete(doc(db,'private',k));bt.delete(doc(db,'bookings',me.h+'_'+tid));await bt.commit()}
  else if(a==='dayadd'){const d=$('#nd').value;cfg=cfg||{days:[],start:'16:00',end:'19:00'};if(d&&!cfg.days.some(x=>x.d===d)){cfg.days.push({d,open:true});cfg.days.sort((x,y)=>x.d<y.d?-1:1);await saveCfg()}}
  else if(a==='daydel'){cfg.days.splice(b.dataset.i,1);await saveCfg()}
  else if(a==='hours'){const s=$('#st').value,n=$('#en').value;cfg=cfg||{days:[]};if(s&&n&&mins(s)<mins(n)){cfg.start=s;cfg.end=n;await saveCfg()}}
@@ -125,18 +129,18 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a==='day'){const d=b.dataset.d,ids=times().map(t=>sid(me.uid,d,t)),fr=ids.filter(i=>!slots[i]),bt=writeBatch(db);fr.length?fr.forEach(i=>bt.set(doc(db,'slots',i),{status:'blocked',tid:me.uid})):ids.filter(i=>slots[i]==='blocked').forEach(i=>bt.delete(doc(db,'slots',i)));await bt.commit()}
  else if(a==='pw'){const p=prompt('Nieuw wachtwoord (min. 6 tekens)');if(p){await updatePassword(auth.currentUser,p);alert('Wachtwoord gewijzigd.')}}
  else if(a==='tadd'){const n=$('#tn').value.trim(),p=$('#tp').value,k=$('#tk').value.trim();if(!n||p.length<6||!k)msg='Vul naam, klas en een wachtwoord van min. 6 tekens in.';else{await addTeacher(n,p,k);await loadT();msg=n+' toegevoegd.'}}
- else if(a==='tedit'){const t=tlist.find(x=>x.id===b.dataset.id),nk=prompt('Nieuwe klas voor '+t.naam,t.klas);if(nk&&K(nk)!==t.klas){const old=await getDoc(doc(db,'classes',t.klas));if(old.exists()&&old.data().uid===t.id)await deleteDoc(old.ref);await setDoc(doc(db,'teachers',t.id),{naam:t.naam,klas:K(nk)});await setDoc(doc(db,'classes',K(nk)),{uid:t.id,naam:t.naam});await loadT();msg='Klas gewijzigd.'}}
- else if(a==='tpw'){const t=tlist.find(x=>x.id===b.dataset.id),p=prompt('Nieuw wachtwoord voor '+t.naam+' (min. 6 tekens). De kalender en afspraken van deze leerkracht worden gewist.');if(p&&p.length>=6){await dropT(t);await loadT();await addTeacher(t.naam,p,t.klas);await loadT();msg='Nieuw wachtwoord ingesteld voor '+t.naam+'.'}}
+ else if(a==='tedit'){const t=tlist.find(x=>x.id===b.dataset.id),nk=prompt('Klassen van '+t.naam+' (meerdere met / ertussen, bv. 5A/6A)',kl(t)),ks=nk?parseKl(nk):[];if(ks.length){for(const k of kls(t))if(!ks.includes(k))await setCls(k,t.id,t.naam,false);for(const k of ks)await setCls(k,t.id,t.naam,true);await setDoc(doc(db,'teachers',t.id),{naam:t.naam,klassen:ks});await loadT();msg='Klassen gewijzigd.'}}
+ else if(a==='tpw'){const t=tlist.find(x=>x.id===b.dataset.id),p=prompt('Nieuw wachtwoord voor '+t.naam+' (min. 6 tekens). De kalender en afspraken van deze leerkracht worden gewist.');if(p&&p.length>=6){await dropT(t);await loadT();await addTeacher(t.naam,p,kl(t));await loadT();msg='Nieuw wachtwoord ingesteld voor '+t.naam+'.'}}
  else if(a==='tdel'){const t=tlist.find(x=>x.id===b.dataset.id);if(confirm(t.naam+' verwijderen, inclusief kalender en afspraken?')){await dropT(t);await loadT();msg=t.naam+' verwijderd.'}}
- else if(a==='sadd'){const v=$('#sv').value.trim(),an=$('#sa').value.trim(),k=$('#sk').value.trim();if(!v||!an||!k)msg='Vul voornaam, achternaam en klas in.';else{await setDoc(doc(db,'students',await hashOf(v,an)),{v,a:an,klas:K(k)});await loadS();msg=v+' '+an+' toegevoegd.'}}
- else if(a==='sedit'){const s=stu.find(x=>x.id===b.dataset.id),v=prompt('Voornaam',s.v),an=v&&prompt('Achternaam',s.a),k=an&&prompt('Klas',s.klas);if(k){const h=await hashOf(v,an);if(h!==s.id){await clearBk(s.id);await deleteDoc(doc(db,'students',s.id))}else if(K(k)!==s.klas)await clearBk(s.id);await setDoc(doc(db,'students',h),{v:v.trim(),a:an.trim(),klas:K(k)});sel.delete(s.id);await loadS();msg='Leerling aangepast (een eventuele afspraak werd geannuleerd).'}}
+ else if(a==='sadd'){const v=$('#sv').value.trim(),an=$('#sa').value.trim(),k=$('#sk').value.trim();if(!v||!an||!k)msg='Vul voornaam, achternaam en klas in.';else{await setDoc(doc(db,'students',await hashOf(v,an)),{v,a:an,klas:parseKl(k).join('/'),klassen:parseKl(k)});await loadS();msg=v+' '+an+' toegevoegd.'}}
+ else if(a==='sedit'){const s=stu.find(x=>x.id===b.dataset.id),v=prompt('Voornaam',s.v),an=v&&prompt('Achternaam',s.a),k=an&&prompt('Klassen (bv. 5A/6A)',kls(s).join('/'));if(k&&parseKl(k).length){const h=await hashOf(v,an);if(h!==s.id){await clearBk(s.id);await deleteDoc(doc(db,'students',s.id))}else if(parseKl(k).join('/')!==kls(s).join('/'))await clearBk(s.id);await setDoc(doc(db,'students',h),{v:v.trim(),a:an.trim(),klas:parseKl(k).join('/'),klassen:parseKl(k)});sel.delete(s.id);await loadS();msg='Leerling aangepast (een eventuele afspraak werd geannuleerd).'}}
  else if(a==='sdel'){const s=stu.find(x=>x.id===b.dataset.id);if(confirm(s.v+' '+s.a+' verwijderen?'))await delS([s.id])}
  else if(a==='sdelsel'){if(sel.size&&confirm(sel.size+' leerlingen verwijderen?'))await delS([...sel])}
- else if(a==='sdelklas'){const ids=stu.filter(s=>s.klas===kf).map(s=>s.id);if(confirm('Alle '+ids.length+' leerlingen van '+kf+' verwijderen?')){await delS(ids);kf=''}}
+ else if(a==='sdelklas'){const ids=stu.filter(s=>kls(s).includes(kf)).map(s=>s.id);if(confirm('Alle '+ids.length+' leerlingen van '+kf+' verwijderen?')){await delS(ids);kf=''}}
  else if(a==='sdelall'){if(stu.length&&confirm('ALLE '+stu.length+' leerlingen verwijderen?'))await delS(stu.map(s=>s.id))}
  else if(a==='adel'){const x=apps.find(y=>y.id===b.dataset.id);if(confirm('Afspraak van '+x.name+' annuleren?')){await delApp(x);await loadA();msg='Afspraak geannuleerd.'}}
  else if(a==='aclear'){if(apps.length&&confirm('ALLE '+apps.length+' afspraken wissen?')){for(const ch of chunks(apps,120)){const bt=writeBatch(db);ch.forEach(x=>{bt.delete(doc(db,'slots',x.id));bt.delete(doc(db,'private',x.id));bt.delete(doc(db,'bookings',x.student+'_'+x.tid))});await bt.commit()}await loadA();msg='Alle afspraken gewist.'}}
- else if(a==='aexp'){const csv='Datum;Tijd;Klas;Leerkracht;Kind\n'+apps.map(x=>{const t=tlist.find(y=>y.id===x.tid)||{};return[x.d,x.tm,t.klas,t.naam,x.name].join(';')}).join('\n'),l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));l.download='afspraken.csv';l.click()}
+ else if(a==='aexp'){const csv='Datum;Tijd;Klas;Leerkracht;Kind\n'+apps.map(x=>{const t=tlist.find(y=>y.id===x.tid)||{};return[x.d,x.tm,t.naam?kl(t):'',t.naam,x.name].join(';')}).join('\n'),l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));l.download='afspraken.csv';l.click()}
  }catch(er){msg=errT(er)}render()});
 document.addEventListener('change',async e=>{const b=e.target,a=b.dataset.a;if(!a)return;
  try{if(a==='kf'){kf=b.value;sel.clear();render();return}
