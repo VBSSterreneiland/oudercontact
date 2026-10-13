@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="nl-BE"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oudercontact – inschrijven</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1e2430;--mu:#6b7385;--pr:#2f6fed;--ok:#1f9d55;--bad:#c0392b;--ln:#dfe3ec;--gr:#eceff5}
+@media(prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1d222b;--tx:#e8ebf2;--mu:#9aa3b5;--ln:#2d3440;--gr:#262c37}}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:var(--card);border-bottom:1px solid var(--ln)}
+main{max-width:980px;margin:18px auto;padding:0 14px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:18px;margin-bottom:16px}
+input,select,button{font:inherit;padding:9px 11px;border-radius:8px;border:1px solid var(--ln);background:var(--card);color:var(--tx)}
+input{width:100%;margin:4px 0 10px}button{cursor:pointer}
+.pr{background:var(--pr);color:#fff;border-color:var(--pr)}.tabs{display:flex;gap:6px;margin-bottom:14px}
+.tabs button.on{background:var(--pr);color:#fff}.mu{color:var(--mu);font-size:13px}.err{color:var(--bad)}
+.grid{overflow-x:auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid var(--ln);padding:4px;text-align:center;min-width:92px}
+th{background:var(--gr);font-weight:600;font-size:13px}td.t{background:var(--gr);font-size:13px;min-width:56px}
+.c{width:100%;padding:7px 4px;font-size:13px;border-radius:6px}
+.free{background:#e7f6ec;color:var(--ok);border-color:#bfe5cc}.taken{background:var(--gr);color:var(--mu);cursor:default}
+.mine{background:var(--ok);color:#fff;border-color:var(--ok)}.off{background:#fdecea;color:var(--bad);border-color:#f3c3be}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0}.row>*{flex:0 0 auto}
+.row input{width:auto}
+</style></head><body>
+<header><b>Oudercontactenweek</b><span id="who"></span></header>
+<main id="app"></main>
+<script>
+const K='oudercontact_v1';
+const demo=()=>({adminPw:'admin',days:[{d:'2026-11-16',open:true},{d:'2026-11-18',open:true},{d:'2026-11-19',open:true}],start:'16:00',end:'19:00',
+teachers:[{id:'t1',naam:'Juf Els',pw:'demo',klas:'1A'}],students:[{v:'Emma',a:'Janssens',klas:'1A'},{v:'Lucas',a:'Peeters',klas:'1A'}],blocked:{},book:{}});
+let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}S=S||demo();
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
+let me=null,tab='ouder',msg='';
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm=s=>String(s||'').trim().toLowerCase();
+const mins=t=>{const[h,m]=t.split(':').map(Number);return h*60+m},hm=n=>String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');
+const times=()=>{const r=[];for(let n=mins(S.start);n<mins(S.end);n+=15)r.push(hm(n));return r};
+const dl=d=>new Date(d+'T12:00').toLocaleDateString('nl-BE',{weekday:'short',day:'numeric',month:'short'});
+const key=(t,d,h)=>t+'|'+d+'|'+h;
+const teacherOf=k=>S.teachers.find(t=>norm(t.klas)===norm(k));
+function parseCSV(txt,cols){const L=txt.split(/\r?\n/).filter(l=>l.trim());if(!L.length)return[];const sep=L[0].includes(';')?';':',';
+let rows=L.map(l=>l.split(sep).map(x=>x.trim().replace(/^"|"$/g,'')));if(/naam|voornaam/i.test(rows[0][0]))rows.shift();return rows.filter(r=>r.length>=cols)}
+function grid(t,mode){ // mode: ouder | leerkracht
+ const days=S.days.filter(x=>x.open),T=times();if(!days.length)return'<p class="mu">Er zijn nog geen dagen open.</p>';
+ let h='<div class="grid"><table><tr><th></th>'+days.map(x=>'<th>'+dl(x.d)+'</th>').join('')+'</tr>';
+ for(const tm of T){h+='<tr><td class="t">'+tm+'</td>';
+  for(const x of days){const k=key(t.id,x.d,tm),b=S.book[k],bl=S.blocked[k];let c;
+   if(mode==='leerkracht'){
+    if(b)c=`<button class="c mine" disabled>${esc(b)}</button>`;
+    else c=`<button class="c ${bl?'off':'free'}" data-a="tog" data-k="${k}">${bl?'✗ past niet':'✓ open'}</button>`;
+   }else{
+    const mine=b&&norm(b)===norm(me.v+' '+me.a);
+    if(mine)c=`<button class="c mine" data-a="cancel" data-k="${k}">Jouw afspraak ✕</button>`;
+    else if(b)c='<button class="c taken" disabled>Bezet</button>';
+    else if(bl)c='<span class="mu">–</span>';
+    else c=`<button class="c free" data-a="book" data-k="${k}">Vrij</button>`;
+   }
+   h+='<td>'+c+'</td>';}
+  h+='</tr>';}
+ return h+'</table></div>';}
+function login(){
+ const f={ouder:`<label>Voornaam kind<input id="v" autocomplete="off"></label><label>Achternaam kind<input id="a" autocomplete="off"></label>`,
+ leerkracht:`<label>Naam<input id="v"></label><label>Wachtwoord<input id="p" type="password"></label>`,
+ beheerder:`<label>Wachtwoord<input id="p" type="password"></label>`}[tab];
+ return`<div class="card" style="max-width:420px;margin:30px auto"><h2 style="margin-top:0">Inloggen</h2>
+ <div class="tabs">${['ouder','leerkracht','beheerder'].map(t=>`<button class="${t===tab?'on':''}" data-a="tab" data-t="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div>
+ ${f}<button class="pr" data-a="login">Inloggen</button><p class="err">${esc(msg)}</p>
+ <p class="mu">Demo: ouder Emma Janssens · leerkracht “Juf Els” / demo · beheerder: admin</p></div>`}
+function ouder(){const t=teacherOf(me.klas);
+ return`<div class="card"><h2 style="margin-top:0">Hallo ouder van ${esc(me.v)} ${esc(me.a)}</h2>
+ <p class="mu">Klas ${esc(me.klas)}${t?' · '+esc(t.naam):''}. Klik op een groen vakje (15 minuten) om te reserveren. Je kan ook je eigen afspraak annuleren.</p>
+ ${t?grid(t,'ouder'):'<p class="err">Voor deze klas is nog geen leerkracht ingesteld.</p>'}</div>`}
+function leerkracht(){const t=S.teachers.find(x=>x.id===me.id);
+ return`<div class="card"><h2 style="margin-top:0">${esc(t.naam)} · klas ${esc(t.klas)}</h2>
+ <p class="mu">Klik op een vakje om het kwartier open (✓) of niet beschikbaar (✗) te zetten. Ingeschreven ouders zie je met de naam van het kind.</p>${grid(t,'leerkracht')}</div>`}
+function beheerder(){
+ return`<div class="card"><h3 style="margin-top:0">Dagen & uren</h3>
+ ${S.days.map((x,i)=>`<div class="row"><b>${dl(x.d)}</b><label><input type="checkbox" ${x.open?'checked':''} data-a="dayopen" data-i="${i}"> open voor inschrijving</label><button data-a="daydel" data-i="${i}">Verwijder</button></div>`).join('')}
+ <div class="row"><input type="date" id="nd"><button data-a="dayadd">Dag toevoegen</button></div>
+ <div class="row">Van <input type="time" id="st" value="${S.start}" step="900"> tot <input type="time" id="en" value="${S.end}" step="900"><button data-a="hours">Uren opslaan</button></div></div>
+ <div class="card"><h3 style="margin-top:0">Importeren (CSV)</h3>
+ <p class="mu">Leerkrachten: <code>naam;wachtwoord;klas</code> · Leerlingen: <code>voornaam;achternaam;klas</code></p>
+ <div class="row"><label>Leerkrachten <input type="file" accept=".csv,.txt" data-a="csvT"></label><label>Leerlingen <input type="file" accept=".csv,.txt" data-a="csvS"></label></div>
+ <p class="mu">${S.teachers.length} leerkrachten · ${S.students.length} leerlingen · ${Object.keys(S.book).length} afspraken</p>${msg?'<p>'+esc(msg)+'</p>':''}</div>
+ <div class="card"><h3 style="margin-top:0">Leerkrachten</h3>${S.teachers.map(t=>`<div>${esc(t.naam)} · ${esc(t.klas)}</div>`).join('')||'<p class="mu">Nog geen.</p>'}
+ <div class="row"><button data-a="reset">Alles terugzetten naar demo</button></div></div>`}
+function render(){$('#who').innerHTML=me?`${esc(me.role)} <button data-a="out">Uitloggen</button>`:'';
+ $('#app').innerHTML=!me?login():me.role==='ouder'?ouder():me.role==='leerkracht'?leerkracht():beheerder();}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b||b.tagName==='INPUT'&&b.type==='file')return;const a=b.dataset.a;
+ if(a==='tab'){tab=b.dataset.t;msg='';}
+ else if(a==='out'){me=null;msg='';}
+ else if(a==='login'){msg='';const v=($('#v')||{}).value,p=($('#p')||{}).value,x=($('#a')||{}).value;
+  if(tab==='ouder'){const s=S.students.find(s=>norm(s.v)===norm(v)&&norm(s.a)===norm(x));if(s)me={role:'ouder',...s};else msg='Leerling niet gevonden. Controleer de schrijfwijze.';}
+  else if(tab==='leerkracht'){const t=S.teachers.find(t=>norm(t.naam)===norm(v)&&t.pw===p);if(t)me={role:'leerkracht',id:t.id};else msg='Naam of wachtwoord klopt niet.';}
+  else{if(p===S.adminPw)me={role:'beheerder'};else msg='Wachtwoord klopt niet.';}}
+ else if(a==='tog'){const k=b.dataset.k;S.blocked[k]?delete S.blocked[k]:S.blocked[k]=1;save();}
+ else if(a==='book'){const k=b.dataset.k,t=k.split('|')[0];if(S.book[k])return;
+  for(const x in S.book)if(x.startsWith(t+'|')&&norm(S.book[x])===norm(me.v+' '+me.a))delete S.book[x];
+  S.book[k]=me.v+' '+me.a;save();}
+ else if(a==='cancel'){delete S.book[b.dataset.k];save();}
+ else if(a==='dayopen'){S.days[b.dataset.i].open=b.checked;save();}
+ else if(a==='daydel'){S.days.splice(b.dataset.i,1);save();}
+ else if(a==='dayadd'){const d=$('#nd').value;if(d&&!S.days.some(x=>x.d===d)){S.days.push({d,open:true});S.days.sort((x,y)=>x.d<y.d?-1:1);save();}}
+ else if(a==='hours'){const s=$('#st').value,n=$('#en').value;if(s&&n&&mins(s)<mins(n)){S.start=s;S.end=n;save();}}
+ else if(a==='reset'){if(confirm('Alle gegevens wissen?')){S=demo();save();}}
+ else return;render();});
+document.addEventListener('change',e=>{const b=e.target,a=b.dataset.a;
+ if(a==='dayopen'){S.days[b.dataset.i].open=b.checked;save();render();}
+ if(a==='csvT'||a==='csvS'){const f=b.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{
+  if(a==='csvT'){const rows=parseCSV(r.result,3);S.teachers=rows.map((x,i)=>({id:'t'+i+'_'+Date.now(),naam:x[0],pw:x[1],klas:x[2]}));msg=rows.length+' leerkrachten geïmporteerd.';}
+  else{const rows=parseCSV(r.result,3);S.students=rows.map(x=>({v:x[0],a:x[1],klas:x[2]}));msg=rows.length+' leerlingen geïmporteerd.';}
+  S.book={};S.blocked={};save();render();};r.readAsText(f);}});
+render();
+</script></body></html>
