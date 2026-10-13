@@ -39,8 +39,8 @@ const mins=t=>{const[h,m]=t.split(':').map(Number);return h*60+m},hm=n=>String(M
 const times=()=>{const r=[];for(let n=mins(cfg.start);n<mins(cfg.end);n+=15)r.push(hm(n));return r};
 const dl=d=>new Date(d+'T12:00').toLocaleDateString('nl-BE',{weekday:'short',day:'numeric',month:'short'});
 const sid=(t,d,h)=>t+'_'+d+'_'+h.replace(':','');
-const parseKl=x=>[...new Set(String(x||'').split(/[\/+&,]/).map(K).filter(Boolean))],kls=t=>t.klassen||[t.klas],kl=t=>kls(t).join('/');
-const errT=e=>({'auth/invalid-credential':'Gegevens kloppen niet.','auth/email-already-in-use':'bestaat al','permission-denied':'Niet toegestaan (is dit kwartier net bezet, of heb je al een afspraak? Annuleer die eerst.)'}[e.code]||e.message);
+const parseKl=x=>[...new Set(String(x||'').split(/[\/+&,]/).map(y=>K(y).replace(/\s+/g,'')).filter(Boolean))],kls=t=>t.klassen||[t.klas],kl=t=>kls(t).join('/');
+const errT=e=>({'auth/invalid-credential':'Gegevens kloppen niet.','auth/email-already-in-use':'bestaat al','permission-denied':'Niet toegestaan. Mogelijke oorzaken: dit kwartier is net bezet, je hebt al een afspraak bij deze leerkracht, of de gegevens van leerkrachten/leerlingen zijn nog niet hersteld (beheerder: tabblad Leerkrachten, knop Controleren en herstellen).'}[e.code]||e.message);
 function parseCSV(t,n){const L=t.split(/\r?\n/).filter(l=>l.trim());if(!L.length)return[];const sep=L[0].includes(';')?';':',';const r=L.map(l=>l.split(sep).map(x=>x.trim().replace(/^"|"$/g,'')));if(/^(voor)?naam$/i.test(r[0][0]))r.shift();return r.filter(x=>x.length>=n&&x[0])}
 function stop(){unsubs.forEach(u=>u());unsubs=[]}
 function start(tids=[]){stop();
@@ -70,7 +70,7 @@ function beheerder(){const c=cfg||{days:[],start:'16:00',end:'19:00'},ks=[...new
  <div class="row"><input type="date" id="nd"><button data-a="dayadd">Dag toevoegen</button></div>
  <div class="row">Van <input type="time" id="st" value="${c.start}" step="900"> tot <input type="time" id="en" value="${c.end}" step="900"><button data-a="hours">Uren opslaan</button></div></div>`,
  leer:`<div class="card"><h3 style="margin-top:0">Leerkracht toevoegen</h3><div class="row"><input id="tn" placeholder="Naam (bv. Juf Els)"><input id="tp" placeholder="Wachtwoord (min. 6)"><input id="tk" placeholder="Klas (5A/6A)" style="width:130px"><button class="pr" data-a="tadd">Toevoegen</button></div></div>
- <div class="card"><h3 style="margin-top:0">Leerkrachten (${tlist.length})</h3><div class="grid"><table><tr><th>Naam</th><th>Klas</th><th></th></tr>${tlist.map(t=>`<tr><td>${esc(t.naam)}</td><td>${esc(kl(t))}</td><td><button data-a="tedit" data-id="${t.id}">Klassen wijzigen</button> <button data-a="tpw" data-id="${t.id}">Nieuw wachtwoord</button> <button data-a="tdel" data-id="${t.id}">✕</button></td></tr>`).join('')}</table></div>
+ <div class="card"><h3 style="margin-top:0">Leerkrachten (${tlist.length})</h3><div class="row"><button data-a="repair">Controleren en herstellen</button></div><div class="grid"><table><tr><th>Naam</th><th>Klas</th><th></th></tr>${tlist.map(t=>`<tr><td>${esc(t.naam)}</td><td>${esc(kl(t))}</td><td><button data-a="tedit" data-id="${t.id}">Klassen wijzigen</button> <button data-a="tpw" data-id="${t.id}">Nieuw wachtwoord</button> <button data-a="tdel" data-id="${t.id}">✕</button></td></tr>`).join('')}</table></div>
  <p class="mu">Nieuw wachtwoord of verwijderen wist de kalender en afspraken van die leerkracht. Leerkrachten kunnen hun wachtwoord zelf wijzigen na het inloggen.</p></div>
  <div class="card"><h3 style="margin-top:0">Importeren (CSV)</h3><p class="mu"><code>naam;wachtwoord;klas</code> (meerdere klassen: <code>5A/6A</code>)</p><input type="file" accept=".csv,.txt" data-a="csvT"></div>`,
  leerl:`<div class="card"><h3 style="margin-top:0">Leerling toevoegen</h3><div class="row"><input id="sv" placeholder="Voornaam"><input id="sa" placeholder="Achternaam"><input id="sk" placeholder="Klas (5A/6A)" style="width:130px"><button class="pr" data-a="sadd">Toevoegen</button></div>
@@ -108,6 +108,14 @@ async function doLogin(){const v=($('#v')||{}).value||'',p=($('#p')||{}).value||
   if(!u){msg='Naam of wachtwoord klopt niet.';return}me={role:'leerkracht',uid:u.uid,...t.data()};start([u.uid])}
  else{const u=(await signInWithEmailAndPassword(auth,v.trim(),p)).user;if(u.uid!==ADMIN_UID){await signOut(auth);msg='Geen beheerder.';return}
   me={role:'beheerder'};await loadT();start()}}
+async function repair(){await loadT();await loadS();let nt=0,ns=0;
+ for(const t of tlist){const ks=parseKl(kls(t).join('/'));if(JSON.stringify(ks)!==JSON.stringify(t.klassen)){await setDoc(doc(db,'teachers',t.id),{naam:t.naam,klassen:ks});t.klassen=ks;nt++}}
+ for(const ch of chunks(stu.filter(x=>JSON.stringify(parseKl(kls(x).join('/')))!==JSON.stringify(x.klassen)),400)){const b=writeBatch(db);ch.forEach(x=>{const ks=parseKl(kls(x).join('/'));b.set(doc(db,'students',x.id),{v:x.v,a:x.a,klas:ks.join('/'),klassen:ks});x.klassen=ks;ns++});await b.commit()}
+ const want={};tlist.forEach(t=>kls(t).forEach(k=>(want[k]=want[k]||[]).push({uid:t.id,naam:t.naam})));
+ for(const d of(await getDocs(collection(db,'classes'))).docs)if(!want[d.id])await deleteDoc(d.ref);
+ for(const[k,L]of Object.entries(want))await setDoc(doc(db,'classes',k),{teachers:L});
+ await loadT();const zonder=[...new Set(stu.flatMap(kls).filter(k=>!want[k]))];
+ msg='Hersteld ('+nt+' leerkrachten, '+ns+' leerlingen aangepast). Klassen met leerkracht: '+(Object.entries(want).map(([k,L])=>k+' ('+L.map(x=>x.naam).join(', ')+')').join(' · ')||'geen')+'.'+(zonder.length?' ⚠ Leerlingen in klassen zonder leerkracht: '+zonder.join(', ')+'.':'')}
 async function importT(txt){const rows=parseCSV(txt,3);let ok=0,bad=[];
  for(const[naam,pw,klas]of rows){try{await addTeacher(naam,pw,klas);await loadT();ok++}catch(e){bad.push(naam+' ('+errT(e)+')')}}
  msg=ok+' leerkrachten toegevoegd.'+(bad.length?' Mislukt: '+bad.join(', '):'')}
@@ -126,6 +134,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a==='daydel'){cfg.days.splice(b.dataset.i,1);await saveCfg()}
  else if(a==='hours'){const s=$('#st').value,n=$('#en').value;cfg=cfg||{days:[]};if(s&&n&&mins(s)<mins(n)){cfg.start=s;cfg.end=n;await saveCfg()}}
  else if(a==='atab'){atab=b.dataset.t;msg='';if(atab==='leer')await loadT();if(atab==='leerl')await loadS();if(atab==='afs'){await loadT();await loadA()}}
+ else if(a==='repair'){await repair()}
  else if(a==='day'){const d=b.dataset.d,ids=times().map(t=>sid(me.uid,d,t)),fr=ids.filter(i=>!slots[i]),bt=writeBatch(db);fr.length?fr.forEach(i=>bt.set(doc(db,'slots',i),{status:'blocked',tid:me.uid})):ids.filter(i=>slots[i]==='blocked').forEach(i=>bt.delete(doc(db,'slots',i)));await bt.commit()}
  else if(a==='pw'){const p=prompt('Nieuw wachtwoord (min. 6 tekens)');if(p){await updatePassword(auth.currentUser,p);alert('Wachtwoord gewijzigd.')}}
  else if(a==='tadd'){const n=$('#tn').value.trim(),p=$('#tp').value,k=$('#tk').value.trim();if(!n||p.length<6||!k)msg='Vul naam, klas en een wachtwoord van min. 6 tekens in.';else{await addTeacher(n,p,k);await loadT();msg=n+' toegevoegd.'}}
