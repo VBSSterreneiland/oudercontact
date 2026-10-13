@@ -3,21 +3,21 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Oudercontact – inschrijven</title>
 <style>
-:root{--bg:#f6f7fb;--card:#fff;--tx:#1e2430;--mu:#6b7385;--pr:#2f6fed;--ok:#1f9d55;--bad:#c0392b;--ln:#dfe3ec;--gr:#eceff5}
-@media(prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1d222b;--tx:#e8ebf2;--mu:#9aa3b5;--ln:#2d3440;--gr:#262c37}}
+:root{--bg:#f4f4f4;--card:#fff;--tx:#2b3a39;--mu:#6f7776;--pr:#199189;--ac:#f6bd55;--or:#f28850;--ok:#199189;--bad:#c4592a;--ln:#e1e4e3;--gr:#eef1f0;--fb:#e3f3ef;--fbd:#b9ddd5;--ob:#fdeee4;--obd:#f6cfb6}
+@media(prefers-color-scheme:dark){:root{--bg:#131817;--card:#1b2220;--tx:#e8efed;--mu:#9aaaa6;--pr:#23a89e;--ok:#23a89e;--bad:#f28850;--ln:#2c3835;--gr:#232c2a;--fb:#1e3a36;--fbd:#2c5650;--ob:#3a2a20;--obd:#5c3d2a}}
 *{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
-header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:var(--card);border-bottom:1px solid var(--ln)}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:var(--card);border-bottom:4px solid var(--ac)}header b{color:var(--pr);font-size:18px}
 main{max-width:980px;margin:18px auto;padding:0 14px}
 .card{background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:18px;margin-bottom:16px}
 input,button{font:inherit;padding:9px 11px;border-radius:8px;border:1px solid var(--ln);background:var(--card);color:var(--tx)}
 input{width:100%;margin:4px 0 10px}button{cursor:pointer}
 .pr{background:var(--pr);color:#fff;border-color:var(--pr)}.tabs{display:flex;gap:6px;margin-bottom:14px}
-.tabs button.on{background:var(--pr);color:#fff}.mu{color:var(--mu);font-size:13px}.err{color:var(--bad)}
+.tabs button.on{background:var(--ac);color:#3a2e0e;border-color:var(--ac);font-weight:600}.mu{color:var(--mu);font-size:13px}.err{color:var(--bad)}
 .grid{overflow-x:auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid var(--ln);padding:4px;text-align:center;min-width:92px}
-th{background:var(--gr);font-size:13px}td.t{background:var(--gr);font-size:13px;min-width:56px}
+th{background:var(--gr);font-size:13px;border-bottom:3px solid var(--ac)}td.t{background:var(--gr);font-size:13px;min-width:56px}
 .c{width:100%;padding:7px 4px;font-size:13px;border-radius:6px}
-.free{background:#e7f6ec;color:var(--ok);border-color:#bfe5cc}.taken{background:var(--gr);color:var(--mu);cursor:default}
-.mine{background:var(--ok);color:#fff;border-color:var(--ok)}.off{background:#fdecea;color:var(--bad);border-color:#f3c3be}
+.free{background:var(--fb);color:var(--pr);border-color:var(--fbd)}.taken{background:var(--gr);color:var(--mu);cursor:default}
+.mine{background:var(--ok);color:#fff;border-color:var(--ok)}.off{background:var(--ob);color:var(--bad);border-color:var(--obd)}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0}.row input{width:auto}
 </style></head><body>
 <header><b>Oudercontactenweek</b><span id="who"></span></header>
