@@ -11,6 +11,8 @@ main{max-width:980px;margin:18px auto;padding:0 14px}
 .card{background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:18px;margin-bottom:16px}
 input,select,button{font:inherit;padding:9px 11px;border-radius:8px;border:1px solid var(--ln);background:var(--card);color:var(--tx)}
 input{width:100%;margin:4px 0 10px}button{cursor:pointer}
+a.btn{font:inherit;padding:9px 11px;border-radius:8px;border:1px solid var(--ln);background:var(--card);color:var(--tx);text-decoration:none}
+.tag{font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--ac);color:#3a2e0e;margin-left:6px;vertical-align:middle}
 .pr{background:var(--pr);color:#fff;border-color:var(--pr)}.tabs{display:flex;gap:6px;margin-bottom:14px}
 .tabs button.on{background:var(--ac);color:#3a2e0e;border-color:var(--ac);font-weight:600}.mu{color:var(--mu);font-size:13px}.err{color:var(--bad)}
 .grid{overflow-x:auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid var(--ln);padding:4px;text-align:center;min-width:92px}
@@ -24,18 +26,21 @@ th{background:var(--gr);font-size:13px;border-bottom:3px solid var(--ac)}td.t{ba
 <main id="app"></main>
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import{getAuth,signInAnonymously,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut,updatePassword}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import{getAuth,signInAnonymously,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import{getFirestore,doc,getDoc,setDoc,deleteDoc,collection,getDocs,query,where,onSnapshot,writeBatch}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 const cfgFb={apiKey:"AIzaSyBynXKGd1IAoGPohX_uKN0lkyh6qIlOXyk",authDomain:"oudercontact-school.firebaseapp.com",projectId:"oudercontact-school",storageBucket:"oudercontact-school.firebasestorage.app",messagingSenderId:"462228061509",appId:"1:462228061509:web:79de610e7184dfa904922c"};
 const ADMIN_UID="yCsN916cFEhgwdsTHWjZgklOEpJ2";
 const app=initializeApp(cfgFb),auth=getAuth(app),db=getFirestore(app);
 const secAuth=getAuth(initializeApp(cfgFb,'sec'));
-let me=null,tab='ouder',msg='',cfg=null,slots={},priv={},bk={},tlist=[],unsubs=[],atab='dagen',q='',kf='',sel=new Set(),stu=[],apps=[];
+let me=null,tab='ouder',msg='',cfg=null,slots={},priv={},bk={},tlist=[],unsubs=[],atab='dagen',q='',kf='',sel=new Set(),stu=[],apps=[],sch={},clsMap={};
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
 const K=s=>String(s).trim().toUpperCase(),mail=(n,i=0)=>norm(n).replace(/[^a-z0-9]+/g,'.').replace(/^\.|\.$/g,'')+(i?'-'+i:'')+'@oudercontact.school';
 const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const mins=t=>{const[h,m]=t.split(':').map(Number);return h*60+m},hm=n=>String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');
+const blocksOf=(t,d)=>{const v=(sch[t]||{})[d];if(!v)return[{a:cfg.start,b:cfg.end}];return typeof v[0]==='string'?[{a:v[0],b:v[1]}]:v};
+const inB=(B,tm)=>B.some(q=>mins(tm)>=mins(q.a)&&mins(tm)<mins(q.b));
+const timesFor=(t,d)=>{const B=blocksOf(t,d),r=[];for(let n=0;n<1440;n+=15){const tm=hm(n);if(inB(B,tm))r.push(tm)}return r};
 const times=()=>{const r=[];for(let n=mins(cfg.start);n<mins(cfg.end);n+=15)r.push(hm(n));return r};
 const dl=d=>new Date(d+'T12:00').toLocaleDateString('nl-BE',{weekday:'short',day:'numeric',month:'short'});
 const sid=(t,d,h)=>t+'_'+d+'_'+h.replace(':','');
@@ -47,10 +52,12 @@ function start(tids=[]){stop();
  unsubs.push(onSnapshot(doc(db,'config','main'),s=>{cfg=s.exists()?s.data():null;render()}));
  if(tids.length)unsubs.push(onSnapshot(query(collection(db,'slots'),where('tid','in',tids)),s=>{slots={};s.forEach(d=>slots[d.id]=d.data().status);render()}));
  if(me.role==='leerkracht')unsubs.push(onSnapshot(query(collection(db,'private'),where('tid','==',me.uid)),s=>{priv={};s.forEach(d=>priv[d.id]=d.data().name);render()}));
+ if(me.role!=='beheerder')unsubs.push(onSnapshot(collection(db,'schedules'),s=>{sch={};s.forEach(d=>sch[d.id]=d.data().days||{});render()}));
  if(me.role==='ouder')tids.forEach(t=>unsubs.push(onSnapshot(doc(db,'bookings',me.h+'_'+t),s=>{s.exists()?bk[t]=s.data().slot:delete bk[t];render()})))}
-function grid(tid,mode){const days=cfg.days.filter(x=>x.open),T=times();if(!days.length)return'<p class="mu">Er zijn nog geen dagen open.</p>';
- let h='<div class="grid"><table><tr><th></th>'+days.map(x=>'<th>'+dl(x.d)+(mode==='leerkracht'?`<br><button class="c off" style="padding:2px 6px;margin-top:3px" data-a="day" data-d="${x.d}">hele dag ⇄</button>`:'')+'</th>').join('')+'</tr>';
- for(const tm of T){h+='<tr><td class="t">'+tm+'</td>';for(const x of days){const k=sid(tid,x.d,tm),st=slots[k];let c;
+function grid(tid,mode){const days=cfg.days.filter(x=>x.open);if(!days.length)return'<p class="mu">Er zijn nog geen dagen open.</p>';const all=days.flatMap(x=>blocksOf(tid,x.d)),T=[];if(all.length)for(let n=Math.min(...all.map(q=>mins(q.a)));n<Math.max(...all.map(q=>mins(q.b)));n+=15)T.push(hm(n));
+ const vis=(d,tm)=>{const st=slots[sid(tid,d,tm)];return st==='booked'||(!st&&inB(blocksOf(tid,d),tm))};let D=days,TT=T;if(mode==='ouder'){D=days.filter(x=>T.some(tm=>vis(x.d,tm)));TT=T.filter(tm=>D.some(x=>vis(x.d,tm)));if(!D.length)return'<p class="mu">Er zijn bij deze leerkracht geen vrije momenten.</p>'}
+ let h='<div class="grid"><table><tr><th></th>'+D.map(x=>'<th>'+dl(x.d)+(mode==='leerkracht'?`<br><button class="c off" style="padding:2px 6px;margin-top:3px" data-a="day" data-d="${x.d}">hele dag ⇄</button>`:'')+'</th>').join('')+'</tr>';
+ let pv=null;for(const tm of TT){if(pv&&mins(tm)-mins(pv)>15)h+='<tr><td colspan="'+(D.length+1)+'" class="mu" style="padding:2px">⋯</td></tr>';pv=tm;h+='<tr><td class="t">'+tm+'</td>';for(const x of D){const k=sid(tid,x.d,tm),st=slots[k];let c;if(st!=='booked'&&!inB(blocksOf(tid,x.d),tm)){h+='<td><span class="mu">·</span></td>';continue}
   if(mode==='leerkracht')c=st==='booked'?`<button class="c mine" disabled>${esc(priv[k]||'bezet')}</button>`:`<button class="c ${st?'off':'free'}" data-a="tog" data-k="${k}" data-st="${st||''}">${st?'✗ past niet':'✓ open'}</button>`;
   else c=bk[tid]===k?`<button class="c mine" data-a="cancel" data-k="${k}">Jouw afspraak ✕</button>`:st==='booked'?'<button class="c taken" disabled>Bezet</button>':st?'<span class="mu">–</span>':`<button class="c free" data-a="book" data-k="${k}">Vrij</button>`;
   h+='<td>'+c+'</td>'}h+='</tr>'}return h+'</table></div>'}
@@ -58,9 +65,25 @@ function login(){const f={ouder:`<label>Voornaam kind<input id="v" autocomplete=
  leerkracht:`<label>Naam<input id="v"></label><label>Wachtwoord<input id="p" type="password"></label>`,
  beheerder:`<label>E-mailadres<input id="v" type="email"></label><label>Wachtwoord<input id="p" type="password"></label>`}[tab];
  return`<div class="card" style="max-width:420px;margin:30px auto"><h2 style="margin-top:0">Inloggen</h2><div class="tabs">${['ouder','leerkracht','beheerder'].map(t=>`<button class="${t===tab?'on':''}" data-a="tab" data-t="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div>${f}<button class="pr" data-a="login">Inloggen</button><p class="err">${esc(msg)}</p></div>`}
-function ouder(){return`<div class="card"><h2 style="margin-top:0">Hallo ouder van ${esc(me.v)} ${esc(me.a)}</h2>${!me.teachers.length?'<p class="err">Voor deze klas is nog geen leerkracht ingesteld.</p>':!cfg?'<p class="mu">De inschrijvingen zijn nog niet open.</p>':`<p class="mu">Klik op een groen vakje (15 minuten) om te reserveren. Je kan bij elke leerkracht één afspraak maken en die annuleren.</p><p class="err">${esc(msg)}</p>`}</div>`+(cfg?me.teachers.map(t=>`<div class="card"><h3 style="margin-top:0">${esc(t.naam)} · ${esc(t.kl.join('/'))}</h3>${grid(t.uid,'ouder')}</div>`).join(''):'')}
-function leerkracht(){return`<div class="card"><h2 style="margin-top:0">${esc(me.naam)} · klas ${esc(kl(me))} <button data-a="pw" style="float:right;font-size:13px">Wachtwoord wijzigen</button></h2><p class="err">${esc(msg)}</p>${!cfg?'<p class="mu">De beheerder heeft nog geen dagen ingesteld.</p>':'<p class="mu">Klik op een vakje om het kwartier open (✓) of niet beschikbaar (✗) te zetten. Ingeschreven kinderen zie je met naam.</p>'+grid(me.uid,'leerkracht')}</div>`}
-const AT=[['dagen','Dagen & uren'],['leer','Leerkrachten'],['leerl','Leerlingen'],['afs','Afspraken']];
+const myApps=()=>Object.entries(bk).map(([tid,k])=>{const[,d,h]=k.split('_');return{tid,d,tm:h.slice(0,2)+':'+h.slice(2),naam:(me.teachers.find(t=>t.uid===tid)||{}).naam||''}}).sort((a,b)=>(a.d+a.tm).localeCompare(b.d+b.tm));
+const dlong=d=>new Date(d+'T12:00').toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long'});
+function ics(L){const f=(d,t)=>d.replace(/-/g,'')+'T'+t.replace(':','')+'00',st=new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z';
+ return['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//VBS Sterreneiland//Oudercontact//NL','CALSCALE:GREGORIAN',...L.flatMap(a=>['BEGIN:VEVENT','UID:'+a.d+a.tm.replace(':','')+'-'+a.tid+'@oudercontact','DTSTAMP:'+st,'DTSTART:'+f(a.d,a.tm),'DTEND:'+f(a.d,hm(mins(a.tm)+15)),'SUMMARY:Oudercontact '+a.naam,'DESCRIPTION:Oudercontact voor '+me.v+' '+me.a+' bij '+a.naam,'LOCATION:VBS Sterreneiland','BEGIN:VALARM','TRIGGER:-PT30M','ACTION:DISPLAY','DESCRIPTION:Oudercontact','END:VALARM','END:VEVENT']),'END:VCALENDAR'].join('\r\n')}
+function mijn(){const L=myApps();
+ if(!L.length)return`<div class="card"><h3 style="margin-top:0">Mijn afspraken</h3><p class="mu">Je hebt nog geen afspraken. Kies hieronder een groen vakje.</p></div>`;
+ const lines=L.map(a=>dlong(a.d)+', '+a.tm+'–'+hm(mins(a.tm)+15)+' bij '+a.naam),body='Dit zijn de afspraken voor de oudercontacten van '+me.v+' '+me.a+':\n\n'+lines.map(x=>'- '+x).join('\n')+'\n\nVBS Sterreneiland';
+ return`<div class="card"><h3 style="margin-top:0">Mijn afspraken</h3>${lines.map(x=>`<div>📅 ${esc(x)}</div>`).join('')}<div class="row" style="margin-top:10px"><button class="pr" data-a="ics">Zet in mijn agenda</button><a class="btn" href="mailto:?subject=${encodeURIComponent('Afspraken oudercontacten')}&amp;body=${encodeURIComponent(body)}">Mail dit overzicht naar mezelf</a></div><p class="mu">Je krijgt geen automatische bevestigingsmail. Bewaar je afspraken met één van deze knoppen.</p></div>`}
+function ouder(){return`<div class="card"><h2 style="margin-top:0">Hallo ouder van ${esc(me.v)} ${esc(me.a)}</h2>${!me.teachers.length?'<p class="err">Voor deze klas is nog geen leerkracht ingesteld.</p>':!cfg?'<p class="mu">De inschrijvingen zijn nog niet open.</p>':`<p class="mu">Klik op een groen vakje (15 minuten) om te reserveren. Je kan bij elke leerkracht één afspraak maken en die annuleren.</p><p class="err">${esc(msg)}</p>`}</div>`+(cfg?mijn():'')+(cfg?me.teachers.map(t=>`<div class="card"><h3 style="margin-top:0">${esc(t.naam)}${t.titu?' <span class="tag">titularis</span>':''}${t.rol?' <span class="tag">'+esc(t.rol)+'</span>':''} · ${esc(t.kl.join('/'))}</h3>${grid(t.uid,'ouder')}</div>`).join(''):'')}
+function leerkracht(){return`<div class="card"><h2 style="margin-top:0">${esc(me.naam)} · klas ${esc(kl(me))}</h2><p class="err">${esc(msg)}</p>${!cfg?'<p class="mu">De beheerder heeft nog geen dagen ingesteld.</p>':'<p class="mu">Klik op een vakje om het kwartier open (✓) of niet beschikbaar (✗) te zetten. Ingeschreven kinderen zie je met naam.</p>'+grid(me.uid,'leerkracht')}</div>`+(cfg?hoursCard():'')}
+function hoursCard(){const xs=cfg.xstart||'07:00',xe=cfg.xend||'20:00';
+ return`<div class="card"><h3 style="margin-top:0">Mijn uren per dag</h3><p class="mu">Wil je ook voor of na de gewone uren afspraken aanbieden, bijvoorbeeld 's morgens voor school én 's avonds? Je kan per dag meerdere blokken instellen (tussen ${xs} en ${xe}). Met <b>+ blok</b> voeg je een blok toe, met ✕ verwijder je er een. Ouders zien enkel de kwartieren binnen je blokken. Standaard: ${cfg.start}–${cfg.end}. Een wijziging wordt meteen bewaard.</p>`+cfg.days.filter(x=>x.open).map(x=>{const B=blocksOf(me.uid,x.d);return`<div class="row"><b style="width:110px">${dl(x.d)}</b>${B.map((q,i)=>`<span>van <input type="time" data-h="a" data-d="${x.d}" data-i="${i}" value="${q.a}" min="${xs}" max="${xe}" step="900"> tot <input type="time" data-h="b" data-d="${x.d}" data-i="${i}" value="${q.b}" min="${xs}" max="${xe}" step="900"> <button data-a="hdel" data-d="${x.d}" data-i="${i}">✕</button></span>`).join('')}<button data-a="hadd" data-d="${x.d}">+ blok</button>${B.length?'':'<span class="mu">geen uren op deze dag</span>'}</div>`}).join('')+`<div class="row"><button data-a="hreset">Alles terugzetten naar standaard</button></div></div>`}
+const putDay=(d,B)=>setDoc(doc(db,'schedules',me.uid),{days:{...(sch[me.uid]||{}),[d]:B}});
+async function saveHours(d){try{const xs=cfg.xstart||'07:00',xe=cfg.xend||'20:00',A=[...document.querySelectorAll('[data-h="a"][data-d="'+d+'"]')],Z=[...document.querySelectorAll('[data-h="b"][data-d="'+d+'"]')],B=A.map((e,i)=>({a:e.value,b:Z[i].value})).sort((p,q)=>mins(p.a||'00:00')-mins(q.a||'00:00'));
+ if(B.some(q=>!q.a||!q.b||mins(q.a)>=mins(q.b)))msg='Bij elk blok moet het einduur na het beginuur liggen.';
+ else if(B.some(q=>mins(q.a)<mins(xs)||mins(q.b)>mins(xe)))msg='Kies uren tussen '+xs+' en '+xe+'.';
+ else if(B.some((q,i)=>i&&mins(q.a)<mins(B[i-1].b)))msg='Blokken mogen elkaar niet overlappen.';
+ else{await putDay(d,B);msg='Uren bewaard voor '+dl(d)+'.'}}catch(er){msg=errT(er)}render()}
+const AT=[['dagen','Dagen & uren'],['leer','Leerkrachten'],['klas','Klassen'],['leerl','Leerlingen'],['afs','Afspraken']];
 const cb='style="width:auto;margin:0"';
 function studList(){const L=flt();return`<table><tr><th><input type="checkbox" data-a="selall" ${cb}></th><th>Voornaam</th><th>Achternaam</th><th>Klas</th><th></th></tr>`+L.map(s=>`<tr><td><input type="checkbox" data-a="sel" data-id="${s.id}" ${sel.has(s.id)?'checked':''} ${cb}></td><td>${esc(s.v)}</td><td>${esc(s.a)}</td><td>${esc(kls(s).join('/'))}</td><td><button data-a="sedit" data-id="${s.id}">✎</button> <button data-a="sdel" data-id="${s.id}">✕</button></td></tr>`).join('')+'</table>'+(L.length?'':'<p class="mu">Geen leerlingen.</p>')}
 function beheerder(){const c=cfg||{days:[],start:'16:00',end:'19:00'},ks=[...new Set(stu.flatMap(kls))].sort();
@@ -68,11 +91,13 @@ function beheerder(){const c=cfg||{days:[],start:'16:00',end:'19:00'},ks=[...new
  const T={
  dagen:`<div class="card"><h3 style="margin-top:0">Dagen & uren</h3>${c.days.map((x,i)=>`<div class="row"><b>${dl(x.d)}</b><label><input type="checkbox" ${x.open?'checked':''} data-a="dayopen" data-i="${i}" ${cb}> open voor inschrijving</label><button data-a="daydel" data-i="${i}">Verwijder</button></div>`).join('')}
  <div class="row"><input type="date" id="nd"><button data-a="dayadd">Dag toevoegen</button></div>
- <div class="row">Van <input type="time" id="st" value="${c.start}" step="900"> tot <input type="time" id="en" value="${c.end}" step="900"><button data-a="hours">Uren opslaan</button></div></div>`,
+ <div class="row">Standaarduren: van <input type="time" id="st" value="${c.start}" step="900"> tot <input type="time" id="en" value="${c.end}" step="900"><button data-a="hours">Uren opslaan</button></div>
+ <div class="row">Leerkrachten mogen hun uren zelf uitbreiden tussen <input type="time" id="xs" value="${c.xstart||'07:00'}" step="900"> en <input type="time" id="xe" value="${c.xend||'20:00'}" step="900"><button data-a="xhours">Opslaan</button></div></div>`,
  leer:`<div class="card"><h3 style="margin-top:0">Leerkracht toevoegen</h3><div class="row"><input id="tn" placeholder="Naam (bv. Juf Els)"><input id="tp" placeholder="Wachtwoord (min. 6)"><input id="tk" placeholder="Klas (5A/6A)" style="width:130px"><button class="pr" data-a="tadd">Toevoegen</button></div></div>
- <div class="card"><h3 style="margin-top:0">Leerkrachten (${tlist.length})</h3><div class="row"><button data-a="repair">Controleren en herstellen</button></div><div class="grid"><table><tr><th>Naam</th><th>Klas</th><th></th></tr>${tlist.map(t=>`<tr><td>${esc(t.naam)}</td><td>${esc(kl(t))}</td><td><button data-a="tedit" data-id="${t.id}">Klassen wijzigen</button> <button data-a="tpw" data-id="${t.id}">Nieuw wachtwoord</button> <button data-a="tdel" data-id="${t.id}">✕</button></td></tr>`).join('')}</table></div>
+ <div class="card"><h3 style="margin-top:0">Leerkrachten (${tlist.length})</h3><div class="row"><button data-a="repair">Controleren en herstellen</button></div><div class="grid"><table><tr><th>Naam</th><th>Klas</th><th>Turn / functie</th><th></th></tr>${tlist.map(t=>`<tr><td>${esc(t.naam)}</td><td>${esc(kl(t))}</td><td><label><input type="checkbox" data-a="turn" data-id="${t.id}" ${t.rol==='Turnleerkracht'?'checked':''} ${cb}> turn</label>${t.rol&&t.rol!=='Turnleerkracht'?' <span class="tag">'+esc(t.rol)+'</span>':''}</td><td><button data-a="trol" data-id="${t.id}">Functie</button> <button data-a="tedit" data-id="${t.id}">Klassen wijzigen</button> <button data-a="tpw" data-id="${t.id}">Nieuw wachtwoord</button> <button data-a="tdel" data-id="${t.id}">✕</button></td></tr>`).join('')}</table></div>
  <p class="mu">Nieuw wachtwoord of verwijderen wist de kalender en afspraken van die leerkracht. Leerkrachten kunnen hun wachtwoord zelf wijzigen na het inloggen.</p></div>
  <div class="card"><h3 style="margin-top:0">Importeren (CSV)</h3><p class="mu"><code>naam;wachtwoord;klas</code> (meerdere klassen: <code>5A/6A</code>)</p><input type="file" accept=".csv,.txt" data-a="csvT"></div>`,
+ klas:`<div class="card"><h3 style="margin-top:0">Klassen en titularissen</h3><p class="mu">Kies per klas de titularis. Ouders zien die leerkracht dan bovenaan, met het label "titularis". Een klas verschijnt hier zodra er een leerkracht aan gekoppeld is.</p><div class="grid"><table><tr><th>Klas</th><th>Leerlingen</th><th>Leerkrachten</th><th>Titularis</th></tr>${Object.keys(clsMap).sort().map(k=>{const c=clsMap[k],L=c.teachers||[];return`<tr><td><b>${esc(k)}</b></td><td>${stu.filter(s=>kls(s).includes(k)).length}</td><td>${L.map(x=>esc(x.naam)).join(', ')}</td><td><select data-a="titu" data-k="${esc(k)}"><option value="">— geen —</option>${L.map(x=>`<option value="${x.uid}" ${c.titu===x.uid?'selected':''}>${esc(x.naam)}</option>`).join('')}</select></td></tr>`}).join('')}</table></div>${Object.keys(clsMap).length?'':'<p class="mu">Nog geen klassen.</p>'}</div>`,
  leerl:`<div class="card"><h3 style="margin-top:0">Leerling toevoegen</h3><div class="row"><input id="sv" placeholder="Voornaam"><input id="sa" placeholder="Achternaam"><input id="sk" placeholder="Klas (5A/6A)" style="width:130px"><button class="pr" data-a="sadd">Toevoegen</button></div>
  <p class="mu">Importeren (CSV): <code>voornaam;achternaam;klas</code> (in twee klassen: <code>5A/6A</code>)</p><input type="file" accept=".csv,.txt" data-a="csvS"></div>
  <div class="card"><h3 style="margin-top:0">Leerlingen (${stu.length})</h3><div class="row"><input id="q" placeholder="Zoeken…" value="${esc(q)}" data-a="q" style="width:160px"><select id="kf" data-a="kf"><option value="">Alle klassen</option>${ks.map(k=>`<option ${k===kf?'selected':''}>${esc(k)}</option>`).join('')}</select>
@@ -86,6 +111,7 @@ function render(){$('#who').innerHTML=me?`${me.role} <button data-a="out">Uitlog
 const saveCfg=()=>setDoc(doc(db,'config','main'),cfg);
 const loadT=async()=>{tlist=(await getDocs(collection(db,'teachers'))).docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>kl(a).localeCompare(kl(b)))};
 const loadS=async()=>{stu=(await getDocs(collection(db,'students'))).docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.klas+a.a+a.v).localeCompare(b.klas+b.a+b.v))};
+const loadC=async()=>{clsMap={};(await getDocs(collection(db,'classes'))).forEach(d=>clsMap[d.id]=d.data())};
 const loadA=async()=>{apps=(await getDocs(collection(db,'private'))).docs.map(d=>{const[tid,dd,h]=d.id.split('_');return{id:d.id,name:d.data().name,tid,student:d.data().student,d:dd,tm:h.slice(0,2)+':'+h.slice(2)}}).sort((a,b)=>(a.d+a.tm).localeCompare(b.d+b.tm))};
 const tname=id=>{const t=tlist.find(t=>t.id===id);return t?t.naam+' ('+kl(t)+')':'?'};
 const hashOf=(v,a)=>sha(norm(v)+'|'+norm(a));
@@ -93,27 +119,28 @@ const chunks=(a,n)=>{const r=[];for(let i=0;i<a.length;i+=n)r.push(a.slice(i,i+n
 async function delApp(a){const b=writeBatch(db);b.delete(doc(db,'slots',a.id));b.delete(doc(db,'private',a.id));b.delete(doc(db,'bookings',a.student+'_'+a.tid));await b.commit()}
 async function clearBk(h){const s=await getDocs(query(collection(db,'private'),where('student','==',h)));for(const d of s.docs)await delApp({id:d.id,student:h,tid:d.data().tid})}
 async function delS(ids){for(const h of ids)await clearBk(h);for(const c of chunks(ids,400)){const b=writeBatch(db);c.forEach(h=>b.delete(doc(db,'students',h)));await b.commit()}ids.forEach(h=>sel.delete(h));await loadS();msg=ids.length+' leerling(en) verwijderd.'}
-async function setCls(k,uid,naam,add){const r=doc(db,'classes',k),x=await getDoc(r);let L=x.exists()?(x.data().teachers||[]):[];L=L.filter(y=>y.uid!==uid);if(add)L.push({uid,naam});L.length?await setDoc(r,{teachers:L}):await deleteDoc(r)}
+async function setCls(k,uid,naam,add,rol=''){const r=doc(db,'classes',k),x=await getDoc(r),o=x.exists()?x.data():{};const L=(o.teachers||[]).filter(y=>y.uid!==uid);if(add)L.push({uid,naam,rol});L.length?await setDoc(r,{teachers:L,titu:L.some(y=>y.uid===o.titu)?o.titu:null}):await deleteDoc(r)}
+async function setRol(t,rol){await setDoc(doc(db,'teachers',t.id),{naam:t.naam,klassen:kls(t),rol});for(const k of kls(t)){const r=doc(db,'classes',k),x=await getDoc(r);if(!x.exists())continue;const d=x.data();await setDoc(r,{teachers:(d.teachers||[]).map(y=>y.uid===t.id?{...y,rol}:y),titu:d.titu||null})}await loadT()}
 async function wipeT(id){for(const c of['slots','private']){const s=await getDocs(query(collection(db,c),where('tid','==',id)));for(const ch of chunks(s.docs,150)){const b=writeBatch(db);ch.forEach(d=>{b.delete(d.ref);if(c==='private')b.delete(doc(db,'bookings',d.data().student+'_'+id))});await b.commit()}}}
 async function addTeacher(naam,pw,klas){if(!parseKl(klas).length)throw new Error('Geen klas');if(tlist.some(t=>norm(t.naam)===norm(naam)))throw new Error(naam+' bestaat al');
- for(let i=0;i<6;i++){try{const c=await createUserWithEmailAndPassword(secAuth,mail(naam,i),pw);await signOut(secAuth);const u=c.user.uid;const ks=parseKl(klas);await setDoc(doc(db,'teachers',u),{naam,klassen:ks});for(const k of ks)await setCls(k,u,naam,true);return u}catch(e){if(e.code!=='auth/email-already-in-use')throw e}}throw new Error('Aanmaken mislukt')}
+ for(let i=0;i<6;i++){try{const c=await createUserWithEmailAndPassword(secAuth,mail(naam,i),pw);await signOut(secAuth);const u=c.user.uid;const ks=parseKl(klas);await setDoc(doc(db,'teachers',u),{naam,klassen:ks,rol:''});for(const k of ks)await setCls(k,u,naam,true);return u}catch(e){if(e.code!=='auth/email-already-in-use')throw e}}throw new Error('Aanmaken mislukt')}
 async function dropT(t){await wipeT(t.id);await deleteDoc(doc(db,'teachers',t.id));for(const k of kls(t))await setCls(k,t.id,t.naam,false)}
 const flt=()=>stu.filter(s=>(!kf||kls(s).includes(kf))&&(!q||norm(s.v+' '+s.a).includes(norm(q))));
 async function doLogin(){const v=($('#v')||{}).value||'',p=($('#p')||{}).value||'',x=($('#a')||{}).value||'';
  if(tab==='ouder'){await signOut(auth);const u=(await signInAnonymously(auth)).user,h=await sha(norm(v)+'|'+norm(x));
   const s=await getDoc(doc(db,'students',h));if(!s.exists()){await signOut(auth);msg='Leerling niet gevonden. Controleer de schrijfwijze.';return}
-  await setDoc(doc(db,'claims',u.uid),{student:h});const d=s.data(),tm={};for(const k of kls(d)){const c=await getDoc(doc(db,'classes',k));if(c.exists())(c.data().teachers||[]).forEach(x=>{(tm[x.uid]=tm[x.uid]||{uid:x.uid,naam:x.naam,kl:[]}).kl.push(k)})}
-  me={role:'ouder',h,...d,teachers:Object.values(tm)};bk={};start(me.teachers.map(t=>t.uid))}
+  await setDoc(doc(db,'claims',u.uid),{student:h});const d=s.data(),tm={};for(const k of kls(d)){const c=await getDoc(doc(db,'classes',k));if(c.exists()){const cd=c.data();(cd.teachers||[]).forEach(x=>{const e=tm[x.uid]=tm[x.uid]||{uid:x.uid,naam:x.naam,rol:x.rol||'',kl:[],titu:false};e.kl.push(k);if(cd.titu===x.uid)e.titu=true})}}
+  me={role:'ouder',h,...d,teachers:Object.values(tm).sort((a,b)=>(b.titu-a.titu)||a.naam.localeCompare(b.naam))};bk={};start(me.teachers.map(t=>t.uid))}
  else if(tab==='leerkracht'){let u=null,t;for(let i=0;i<6&&!u;i++){try{const x=(await signInWithEmailAndPassword(auth,mail(v,i),p)).user,d=await getDoc(doc(db,'teachers',x.uid));if(d.exists()){u=x;t=d}else await signOut(auth)}catch(e){if(e.code!=='auth/invalid-credential'&&e.code!=='auth/user-not-found')throw e}}
   if(!u){msg='Naam of wachtwoord klopt niet.';return}me={role:'leerkracht',uid:u.uid,...t.data()};start([u.uid])}
  else{const u=(await signInWithEmailAndPassword(auth,v.trim(),p)).user;if(u.uid!==ADMIN_UID){await signOut(auth);msg='Geen beheerder.';return}
   me={role:'beheerder'};await loadT();start()}}
 async function repair(){await loadT();await loadS();let nt=0,ns=0;
- for(const t of tlist){const ks=parseKl(kls(t).join('/'));if(JSON.stringify(ks)!==JSON.stringify(t.klassen)){await setDoc(doc(db,'teachers',t.id),{naam:t.naam,klassen:ks});t.klassen=ks;nt++}}
+ for(const t of tlist){const ks=parseKl(kls(t).join('/'));if(JSON.stringify(ks)!==JSON.stringify(t.klassen)){await setDoc(doc(db,'teachers',t.id),{naam:t.naam,klassen:ks,rol:t.rol||''});t.klassen=ks;nt++}}
  for(const ch of chunks(stu.filter(x=>JSON.stringify(parseKl(kls(x).join('/')))!==JSON.stringify(x.klassen)),400)){const b=writeBatch(db);ch.forEach(x=>{const ks=parseKl(kls(x).join('/'));b.set(doc(db,'students',x.id),{v:x.v,a:x.a,klas:ks.join('/'),klassen:ks});x.klassen=ks;ns++});await b.commit()}
- const want={};tlist.forEach(t=>kls(t).forEach(k=>(want[k]=want[k]||[]).push({uid:t.id,naam:t.naam})));
- for(const d of(await getDocs(collection(db,'classes'))).docs)if(!want[d.id])await deleteDoc(d.ref);
- for(const[k,L]of Object.entries(want))await setDoc(doc(db,'classes',k),{teachers:L});
+ const want={},hv={};tlist.forEach(t=>kls(t).forEach(k=>(want[k]=want[k]||[]).push({uid:t.id,naam:t.naam,rol:t.rol||''})));
+ for(const d of(await getDocs(collection(db,'classes'))).docs){hv[d.id]=d.data().titu;if(!want[d.id])await deleteDoc(d.ref)}
+ for(const[k,L]of Object.entries(want))await setDoc(doc(db,'classes',k),{teachers:L,titu:L.some(x=>x.uid===hv[k])?hv[k]:null});
  await loadT();const zonder=[...new Set(stu.flatMap(kls).filter(k=>!want[k]))];
  msg='Hersteld ('+nt+' leerkrachten, '+ns+' leerlingen aangepast). Klassen met leerkracht: '+(Object.entries(want).map(([k,L])=>k+' ('+L.map(x=>x.naam).join(', ')+')').join(' · ')||'geen')+'.'+(zonder.length?' ⚠ Leerlingen in klassen zonder leerkracht: '+zonder.join(', ')+'.':'')}
 async function importT(txt){const rows=parseCSV(txt,3);let ok=0,bad=[];
@@ -133,12 +160,17 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a==='dayadd'){const d=$('#nd').value;cfg=cfg||{days:[],start:'16:00',end:'19:00'};if(d&&!cfg.days.some(x=>x.d===d)){cfg.days.push({d,open:true});cfg.days.sort((x,y)=>x.d<y.d?-1:1);await saveCfg()}}
  else if(a==='daydel'){cfg.days.splice(b.dataset.i,1);await saveCfg()}
  else if(a==='hours'){const s=$('#st').value,n=$('#en').value;cfg=cfg||{days:[]};if(s&&n&&mins(s)<mins(n)){cfg.start=s;cfg.end=n;await saveCfg()}}
- else if(a==='atab'){atab=b.dataset.t;msg='';if(atab==='leer')await loadT();if(atab==='leerl')await loadS();if(atab==='afs'){await loadT();await loadA()}}
+ else if(a==='atab'){atab=b.dataset.t;msg='';if(atab==='leer')await loadT();if(atab==='klas'){await loadT();await loadS();await loadC()}if(atab==='leerl')await loadS();if(atab==='afs'){await loadT();await loadA()}}
+ else if(a==='ics'){const l=document.createElement('a');l.href=URL.createObjectURL(new Blob([ics(myApps())],{type:'text/calendar'}));l.download='oudercontact.ics';l.click()}
+ else if(a==='trol'){const t=tlist.find(x=>x.id===b.dataset.id),v=prompt('Functie die ouders naast de naam zien (leeg laten = geen), bv. turnleerkracht, zorgcoördinator',t.rol||'');if(v!==null){await setRol(t,v.trim());msg='Functie bewaard.'}}
+ else if(a==='hadd'){const d=b.dataset.d,B=blocksOf(me.uid,d),xe=mins(cfg.xend||'20:00'),st=mins(B.length?B[B.length-1].b:cfg.start),en=Math.min(st+60,xe);if(en-st<15)msg='Geen ruimte meer voor een extra blok (pas eerst een ander blok aan).';else await putDay(d,[...B,{a:hm(st),b:hm(en)}])}
+ else if(a==='hdel'){const d=b.dataset.d;await putDay(d,blocksOf(me.uid,d).filter((_,i)=>i!==+b.dataset.i))}
+ else if(a==='hreset'){await setDoc(doc(db,'schedules',me.uid),{days:{}});msg='Uren teruggezet naar standaard.'}
+ else if(a==='xhours'){const x1=$('#xs').value,x2=$('#xe').value;cfg=cfg||{days:[],start:'16:00',end:'19:00'};if(x1&&x2&&mins(x1)<mins(x2)){cfg.xstart=x1;cfg.xend=x2;await saveCfg();msg='Opgeslagen.'}}
  else if(a==='repair'){await repair()}
- else if(a==='day'){const d=b.dataset.d,ids=times().map(t=>sid(me.uid,d,t)),fr=ids.filter(i=>!slots[i]),bt=writeBatch(db);fr.length?fr.forEach(i=>bt.set(doc(db,'slots',i),{status:'blocked',tid:me.uid})):ids.filter(i=>slots[i]==='blocked').forEach(i=>bt.delete(doc(db,'slots',i)));await bt.commit()}
- else if(a==='pw'){const p=prompt('Nieuw wachtwoord (min. 6 tekens)');if(p){await updatePassword(auth.currentUser,p);alert('Wachtwoord gewijzigd.')}}
+ else if(a==='day'){const d=b.dataset.d,ids=timesFor(me.uid,d).map(t=>sid(me.uid,d,t)),fr=ids.filter(i=>!slots[i]),bt=writeBatch(db);fr.length?fr.forEach(i=>bt.set(doc(db,'slots',i),{status:'blocked',tid:me.uid})):ids.filter(i=>slots[i]==='blocked').forEach(i=>bt.delete(doc(db,'slots',i)));await bt.commit()}
  else if(a==='tadd'){const n=$('#tn').value.trim(),p=$('#tp').value,k=$('#tk').value.trim();if(!n||p.length<6||!k)msg='Vul naam, klas en een wachtwoord van min. 6 tekens in.';else{await addTeacher(n,p,k);await loadT();msg=n+' toegevoegd.'}}
- else if(a==='tedit'){const t=tlist.find(x=>x.id===b.dataset.id),nk=prompt('Klassen van '+t.naam+' (meerdere met / ertussen, bv. 5A/6A)',kl(t)),ks=nk?parseKl(nk):[];if(ks.length){for(const k of kls(t))if(!ks.includes(k))await setCls(k,t.id,t.naam,false);for(const k of ks)await setCls(k,t.id,t.naam,true);await setDoc(doc(db,'teachers',t.id),{naam:t.naam,klassen:ks});await loadT();msg='Klassen gewijzigd.'}}
+ else if(a==='tedit'){const t=tlist.find(x=>x.id===b.dataset.id),nk=prompt('Klassen van '+t.naam+' (meerdere met / ertussen, bv. 5A/6A)',kl(t)),ks=nk?parseKl(nk):[];if(ks.length){for(const k of kls(t))if(!ks.includes(k))await setCls(k,t.id,t.naam,false);for(const k of ks)await setCls(k,t.id,t.naam,true,t.rol||'');await setDoc(doc(db,'teachers',t.id),{naam:t.naam,klassen:ks,rol:t.rol||''});await loadT();msg='Klassen gewijzigd.'}}
  else if(a==='tpw'){const t=tlist.find(x=>x.id===b.dataset.id),p=prompt('Nieuw wachtwoord voor '+t.naam+' (min. 6 tekens). De kalender en afspraken van deze leerkracht worden gewist.');if(p&&p.length>=6){await dropT(t);await loadT();await addTeacher(t.naam,p,kl(t));await loadT();msg='Nieuw wachtwoord ingesteld voor '+t.naam+'.'}}
  else if(a==='tdel'){const t=tlist.find(x=>x.id===b.dataset.id);if(confirm(t.naam+' verwijderen, inclusief kalender en afspraken?')){await dropT(t);await loadT();msg=t.naam+' verwijderd.'}}
  else if(a==='sadd'){const v=$('#sv').value.trim(),an=$('#sa').value.trim(),k=$('#sk').value.trim();if(!v||!an||!k)msg='Vul voornaam, achternaam en klas in.';else{await setDoc(doc(db,'students',await hashOf(v,an)),{v,a:an,klas:parseKl(k).join('/'),klassen:parseKl(k)});await loadS();msg=v+' '+an+' toegevoegd.'}}
@@ -151,8 +183,10 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a==='aclear'){if(apps.length&&confirm('ALLE '+apps.length+' afspraken wissen?')){for(const ch of chunks(apps,120)){const bt=writeBatch(db);ch.forEach(x=>{bt.delete(doc(db,'slots',x.id));bt.delete(doc(db,'private',x.id));bt.delete(doc(db,'bookings',x.student+'_'+x.tid))});await bt.commit()}await loadA();msg='Alle afspraken gewist.'}}
  else if(a==='aexp'){const csv='Datum;Tijd;Klas;Leerkracht;Kind\n'+apps.map(x=>{const t=tlist.find(y=>y.id===x.tid)||{};return[x.d,x.tm,t.naam?kl(t):'',t.naam,x.name].join(';')}).join('\n'),l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));l.download='afspraken.csv';l.click()}
  }catch(er){msg=errT(er)}render()});
-document.addEventListener('change',async e=>{const b=e.target,a=b.dataset.a;if(!a)return;
- try{if(a==='kf'){kf=b.value;sel.clear();render();return}
+document.addEventListener('change',async e=>{const b=e.target,a=b.dataset.a;if(b.dataset.h){await saveHours(b.dataset.d);return}if(!a)return;
+ try{if(a==='titu'){const k=b.dataset.k,c=clsMap[k];await setDoc(doc(db,'classes',k),{teachers:c.teachers||[],titu:b.value||null});await loadC();msg='Titularis bewaard.';render();return}
+ if(a==='turn'){const t=tlist.find(x=>x.id===b.dataset.id);await setRol(t,b.checked?'Turnleerkracht':'');msg=b.checked?t.naam+' is nu turnleerkracht.':'Functie verwijderd.';render();return}
+ if(a==='kf'){kf=b.value;sel.clear();render();return}
  if(a==='sel'){b.checked?sel.add(b.dataset.id):sel.delete(b.dataset.id);render();return}
  if(a==='selall'){flt().forEach(x=>b.checked?sel.add(x.id):sel.delete(x.id));render();return}
  if(a==='dayopen'){cfg.days[b.dataset.i].open=b.checked;await saveCfg()}
