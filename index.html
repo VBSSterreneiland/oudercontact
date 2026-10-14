@@ -12,6 +12,10 @@ main{max-width:980px;margin:18px auto;padding:0 14px}
 input,select,button{font:inherit;padding:9px 11px;border-radius:8px;border:1px solid var(--ln);background:var(--card);color:var(--tx)}
 input{width:100%;margin:4px 0 10px}button{cursor:pointer}
 a.btn{font:inherit;padding:9px 11px;border-radius:8px;border:1px solid var(--ln);background:var(--card);color:var(--tx);text-decoration:none}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}.kpi{background:var(--gr);border-radius:10px;padding:10px;text-align:center}.kpi b{display:block;font-size:24px;color:var(--pr)}
+.bar{background:var(--gr);border-radius:99px;height:10px;overflow:hidden;min-width:90px}.bar i{display:block;height:100%;background:var(--pr)}
+.st-niet{color:var(--bad);font-weight:600}.st-deels{color:#a8741a;font-weight:600}.st-volledig{color:var(--ok);font-weight:600}.st-geen{color:var(--mu)}
+@media print{header,.tabs,.noprint,button{display:none!important}body{background:#fff}.card{border:0;padding:0}}
 .tag{font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--ac);color:#3a2e0e;margin-left:6px;vertical-align:middle}
 .pr{background:var(--pr);color:#fff;border-color:var(--pr)}.tabs{display:flex;gap:6px;margin-bottom:14px}
 .tabs button.on{background:var(--ac);color:#3a2e0e;border-color:var(--ac);font-weight:600}.mu{color:var(--mu);font-size:13px}.err{color:var(--bad)}
@@ -27,12 +31,12 @@ th{background:var(--gr);font-size:13px;border-bottom:3px solid var(--ac)}td.t{ba
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import{getAuth,signInAnonymously,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import{getFirestore,doc,getDoc,setDoc,deleteDoc,collection,getDocs,query,where,onSnapshot,writeBatch}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import{getFirestore,doc,getDoc,setDoc,updateDoc,deleteDoc,collection,getDocs,query,where,onSnapshot,writeBatch}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 const cfgFb={apiKey:"AIzaSyBynXKGd1IAoGPohX_uKN0lkyh6qIlOXyk",authDomain:"oudercontact-school.firebaseapp.com",projectId:"oudercontact-school",storageBucket:"oudercontact-school.firebasestorage.app",messagingSenderId:"462228061509",appId:"1:462228061509:web:79de610e7184dfa904922c"};
 const ADMIN_UID="yCsN916cFEhgwdsTHWjZgklOEpJ2";
 const app=initializeApp(cfgFb),auth=getAuth(app),db=getFirestore(app);
 const secAuth=getAuth(initializeApp(cfgFb,'sec'));
-let me=null,tab='ouder',msg='',cfg=null,slots={},priv={},bk={},tlist=[],unsubs=[],atab='dagen',q='',kf='',sel=new Set(),stu=[],apps=[],sch={},clsMap={};
+let me=null,tab='ouder',msg='',cfg=null,slots={},priv={},bk={},tlist=[],unsubs=[],atab='dagen',q='',kf='',sel=new Set(),stu=[],apps=[],sch={},clsMap={},stab='over',bkf='',bsf='bel',bq='',atf='',slAll={},aan={};
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
 const K=s=>String(s).trim().toUpperCase(),mail=(n,i=0)=>norm(n).replace(/[^a-z0-9]+/g,'.').replace(/^\.|\.$/g,'')+(i?'-'+i:'')+'@oudercontact.school';
@@ -51,14 +55,14 @@ function stop(){unsubs.forEach(u=>u());unsubs=[]}
 function start(tids=[]){stop();
  unsubs.push(onSnapshot(doc(db,'config','main'),s=>{cfg=s.exists()?s.data():null;render()}));
  if(tids.length)unsubs.push(onSnapshot(query(collection(db,'slots'),where('tid','in',tids)),s=>{slots={};s.forEach(d=>slots[d.id]=d.data().status);render()}));
- if(me.role==='leerkracht')unsubs.push(onSnapshot(query(collection(db,'private'),where('tid','==',me.uid)),s=>{priv={};s.forEach(d=>priv[d.id]=d.data().name);render()}));
+ if(me.role==='leerkracht')unsubs.push(onSnapshot(query(collection(db,'private'),where('tid','==',me.uid)),s=>{priv={};aan={};s.forEach(d=>{priv[d.id]=d.data().name;aan[d.id]=!!d.data().aanwezig});render()}));
  if(me.role!=='beheerder')unsubs.push(onSnapshot(collection(db,'schedules'),s=>{sch={};s.forEach(d=>sch[d.id]=d.data().days||{});render()}));
  if(me.role==='ouder')tids.forEach(t=>unsubs.push(onSnapshot(doc(db,'bookings',me.h+'_'+t),s=>{s.exists()?bk[t]=s.data().slot:delete bk[t];render()})))}
 function grid(tid,mode){const days=cfg.days.filter(x=>x.open);if(!days.length)return'<p class="mu">Er zijn nog geen dagen open.</p>';const all=days.flatMap(x=>blocksOf(tid,x.d)),T=[];if(all.length)for(let n=Math.min(...all.map(q=>mins(q.a)));n<Math.max(...all.map(q=>mins(q.b)));n+=15)T.push(hm(n));
  const vis=(d,tm)=>{const st=slots[sid(tid,d,tm)];return st==='booked'||(!st&&inB(blocksOf(tid,d),tm))};let D=days,TT=T;if(mode==='ouder'){D=days.filter(x=>T.some(tm=>vis(x.d,tm)));TT=T.filter(tm=>D.some(x=>vis(x.d,tm)));if(!D.length)return'<p class="mu">Er zijn bij deze leerkracht geen vrije momenten.</p>'}
  let h='<div class="grid"><table><tr><th></th>'+D.map(x=>'<th>'+dl(x.d)+(mode==='leerkracht'?`<br><button class="c off" style="padding:2px 6px;margin-top:3px" data-a="day" data-d="${x.d}">hele dag ⇄</button>`:'')+'</th>').join('')+'</tr>';
  let pv=null;for(const tm of TT){if(pv&&mins(tm)-mins(pv)>15)h+='<tr><td colspan="'+(D.length+1)+'" class="mu" style="padding:2px">⋯</td></tr>';pv=tm;h+='<tr><td class="t">'+tm+'</td>';for(const x of D){const k=sid(tid,x.d,tm),st=slots[k];let c;if(st!=='booked'&&!inB(blocksOf(tid,x.d),tm)){h+='<td><span class="mu">·</span></td>';continue}
-  if(mode==='leerkracht')c=st==='booked'?`<button class="c mine" disabled>${esc(priv[k]||'bezet')}</button>`:`<button class="c ${st?'off':'free'}" data-a="tog" data-k="${k}" data-st="${st||''}">${st?'✗ past niet':'✓ open'}</button>`;
+  if(mode==='leerkracht')c=st==='booked'?`<button class="c mine" disabled>${esc(priv[k]||'bezet')}</button><label class="mu" style="font-size:11px;display:block"><input type="checkbox" data-a="pres" data-k="${k}" ${aan[k]?'checked':''} ${cb}> aanwezig</label>`:`<button class="c ${st?'off':'free'}" data-a="tog" data-k="${k}" data-st="${st||''}">${st?'✗ past niet':'✓ open'}</button>`;
   else c=bk[tid]===k?`<button class="c mine" data-a="cancel" data-k="${k}">Jouw afspraak ✕</button>`:st==='booked'?'<button class="c taken" disabled>Bezet</button>':st?'<span class="mu">–</span>':`<button class="c free" data-a="book" data-k="${k}">Vrij</button>`;
   h+='<td>'+c+'</td>'}h+='</tr>'}return h+'</table></div>'}
 function login(){const f={ouder:`<label>Voornaam kind<input id="v" autocomplete="off"></label><label>Achternaam kind<input id="a" autocomplete="off"></label>`,
@@ -83,6 +87,29 @@ async function saveHours(d){try{const xs=cfg.xstart||'07:00',xe=cfg.xend||'20:00
  else if(B.some(q=>mins(q.a)<mins(xs)||mins(q.b)>mins(xe)))msg='Kies uren tussen '+xs+' en '+xe+'.';
  else if(B.some((q,i)=>i&&mins(q.a)<mins(B[i-1].b)))msg='Blokken mogen elkaar niet overlappen.';
  else{await putDay(d,B);msg='Uren bewaard voor '+dl(d)+'.'}}catch(er){msg=errT(er)}render()}
+const stL={niet:'Niet ingeschreven',deels:'Gedeeltelijk',volledig:'Volledig',geen:'Geen leerkracht in klas'};
+const tn=id=>{const t=tlist.find(x=>x.id===id);return t?t.naam:'?'};
+function rows(){const by={};apps.forEach(a=>(by[a.student]=by[a.student]||[]).push(a));
+ return stu.map(x=>{const exp=[...new Set(kls(x).flatMap(k=>((clsMap[k]||{}).teachers||[]).map(y=>y.uid)))],mine=by[x.id]||[],have=new Set(mine.map(a=>a.tid)),miss=exp.filter(t=>!have.has(t));
+  return{...x,exp,mine,miss,st:!exp.length?'geen':!mine.length?'niet':miss.length?'deels':'volledig',aanw:mine.some(a=>a.aan)}})}
+function bellRows(){return rows().filter(x=>(!bkf||kls(x).includes(bkf))&&(bsf==='alle'||(bsf==='bel'?(x.st==='niet'||x.st==='deels'):x.st===bsf))&&(!bq||norm(x.v+' '+x.a).includes(norm(bq)))).sort((a,b)=>(kl(a)+a.a+a.v).localeCompare(kl(b)+b.a+b.v))}
+function bellList(){const L=bellRows();return`<table><tr><th>☐</th><th>Leerling</th><th>Klas</th><th>Status</th><th>Afspraken</th><th>Nog geen afspraak bij</th></tr>`+L.map(x=>`<tr><td>☐</td><td style="text-align:left">${esc(x.a)} ${esc(x.v)}</td><td>${esc(kl(x))}</td><td class="st-${x.st}">${stL[x.st]}</td><td style="text-align:left">${x.mine.map(a=>esc(tn(a.tid))+': '+dl(a.d)+' '+a.tm).join('<br>')||'—'}</td><td style="text-align:left">${x.miss.map(t=>esc(tn(t))).join(', ')||'—'}</td></tr>`).join('')+`</table><p class="mu">${L.length} leerlingen</p>`}
+function afsTab(){const sub=[['over','Overzicht'],['bel','Wie ontbreekt nog?'],['alle','Alle afspraken']];
+ return`<div class="tabs noprint">${sub.map(([k,n])=>`<button class="${k===stab?'on':''}" data-a="stab" data-t="${k}">${n}</button>`).join('')}<button data-a="refresh" style="margin-left:auto">↻ Vernieuwen</button></div>`+(stab==='over'?overzicht():stab==='bel'?bellen():alle())}
+function overzicht(){const R=rows(),n=R.length,pc=x=>n?Math.round(100*x/n):0,ing=R.filter(x=>x.mine.length).length,vol=R.filter(x=>x.st==='volledig').length,deels=R.filter(x=>x.st==='deels').length,niet=R.filter(x=>x.st==='niet').length,aw=apps.filter(a=>a.aan).length,pk=R.filter(x=>x.aanw).length;
+ const KP=[[n,'leerlingen'],[ing+' ('+pc(ing)+'%)','ingeschreven (minstens 1 afspraak)'],[vol,'volledig ingeschreven'],[deels,'gedeeltelijk'],[niet,'nog niet ingeschreven'],[apps.length,'afspraken in totaal'],[pk+' / '+n,'kinderen met aanwezige ouder'],[aw+' / '+apps.length,'afspraken met ✓ aanwezig']];
+ const ks=[...new Set(R.flatMap(kls))].sort(),open=cfg?cfg.days.filter(x=>x.open):[];
+ const perK=ks.map(k=>{const L=R.filter(x=>kls(x).includes(k)),c=f=>L.filter(f).length,i=c(x=>x.mine.length),z=c(x=>x.st==='niet'),d=c(x=>x.st==='deels');return`<tr><td><b>${esc(k)}</b></td><td>${L.length}</td><td>${i}</td><td>${c(x=>x.st==='volledig')}</td><td>${d}</td><td class="st-niet">${z}</td><td>${c(x=>x.aanw)}</td><td><div class="bar"><i style="width:${L.length?Math.round(100*i/L.length):0}%"></i></div></td><td>${z+d?`<button data-a="tobel" data-k="${esc(k)}">Wie ontbreekt?</button>`:'✓'}</td></tr>`}).join('');
+ const perT=tlist.map(t=>{let tot=0,bl=0,bi=0;open.forEach(x=>timesFor(t.id,x.d).forEach(tm=>{const q=slAll[sid(t.id,x.d,tm)];tot++;if(q&&q.status==='blocked')bl++;if(q&&q.status==='booked')bi++}));const ap=apps.filter(a=>a.tid===t.id).length,be=tot-bl;return`<tr><td>${esc(t.naam)}</td><td>${esc(kl(t))}</td><td>${be}</td><td>${ap}</td><td>${Math.max(0,be-bi)}</td><td><div class="bar"><i style="width:${be?Math.round(100*ap/be):0}%"></i></div></td></tr>`}).join('');
+ const mx=Math.max(1,...open.map(y=>apps.filter(a=>a.d===y.d).length)),perD=open.map(x=>{const c=apps.filter(a=>a.d===x.d).length;return`<tr><td>${dl(x.d)}</td><td>${c}</td><td><div class="bar"><i style="width:${Math.round(100*c/mx)}%"></i></div></td></tr>`}).join('');
+ return`<div class="card"><div class="kpis">${KP.map(([v,l])=>`<div class="kpi"><b>${v}</b><span class="mu">${l}</span></div>`).join('')}</div><p class="mu">"Ingeschreven" = minstens één afspraak. "Volledig" = een afspraak bij elke leerkracht van de klas. Aanwezigheid vinken de leerkrachten aan in hun kalender, of jij bij Alle afspraken.</p></div>
+ <div class="card"><h3 style="margin-top:0">Per klas</h3><div class="grid"><table><tr><th>Klas</th><th>Leerlingen</th><th>Ingeschreven</th><th>Volledig</th><th>Gedeeltelijk</th><th>Niet</th><th>Aanwezig</th><th>Voortgang</th><th></th></tr>${perK}</table></div></div>
+ <div class="card"><h3 style="margin-top:0">Per leerkracht</h3><div class="grid"><table><tr><th>Leerkracht</th><th>Klas</th><th>Beschikbare kwartieren</th><th>Afspraken</th><th>Nog vrij</th><th>Bezetting</th></tr>${perT}</table></div></div>
+ <div class="card"><h3 style="margin-top:0">Afspraken per dag</h3><div class="grid"><table><tr><th>Dag</th><th>Afspraken</th><th></th></tr>${perD}</table></div></div>`}
+function bellen(){const ks=[...new Set(stu.flatMap(kls))].sort();
+ return`<div class="card"><div class="row noprint"><select data-a="bkf"><option value="">Alle klassen</option>${ks.map(k=>`<option ${k===bkf?'selected':''}>${esc(k)}</option>`).join('')}</select><select data-a="bsf">${[['bel','Te bellen (niet + gedeeltelijk)'],['niet','Niet ingeschreven'],['deels','Gedeeltelijk'],['volledig','Volledig'],['alle','Alle']].map(([v,n])=>`<option value="${v}" ${v===bsf?'selected':''}>${n}</option>`).join('')}</select><input id="bq" data-a="bq" placeholder="Zoeken…" value="${esc(bq)}" style="width:160px"><button data-a="bexp">Exporteer CSV</button><button data-a="print">Afdrukken</button></div><div class="grid" id="bl">${bellList()}</div></div>`}
+function alle(){const sm={};stu.forEach(x=>sm[x.id]=x);const L=apps.filter(a=>!atf||a.tid===atf);
+ return`<div class="card"><div class="row noprint"><select data-a="atf"><option value="">Alle leerkrachten</option>${tlist.map(t=>`<option value="${t.id}" ${t.id===atf?'selected':''}>${esc(t.naam)}</option>`).join('')}</select><button data-a="aexp">Exporteer CSV</button><button data-a="aclear">Alle afspraken wissen</button></div><div class="grid"><table><tr><th>Datum</th><th>Tijd</th><th>Leerkracht</th><th>Kind</th><th>Klas</th><th>Aanwezig</th><th></th></tr>${L.map(a=>{const x=sm[a.student];return`<tr><td>${dl(a.d)}</td><td>${a.tm}</td><td>${esc(tname(a.tid))}</td><td>${esc(a.name)}</td><td>${x?esc(kls(x).join('/')):''}</td><td><input type="checkbox" data-a="apres" data-id="${a.id}" ${a.aan?'checked':''} ${cb}></td><td><button data-a="adel" data-id="${a.id}">✕</button></td></tr>`}).join('')}</table></div>${L.length?'':'<p class="mu">Geen afspraken.</p>'}</div>`}
 const AT=[['dagen','Dagen & uren'],['leer','Leerkrachten'],['klas','Klassen'],['leerl','Leerlingen'],['afs','Afspraken']];
 const cb='style="width:auto;margin:0"';
 function studList(){const L=flt();return`<table><tr><th><input type="checkbox" data-a="selall" ${cb}></th><th>Voornaam</th><th>Achternaam</th><th>Klas</th><th></th></tr>`+L.map(s=>`<tr><td><input type="checkbox" data-a="sel" data-id="${s.id}" ${sel.has(s.id)?'checked':''} ${cb}></td><td>${esc(s.v)}</td><td>${esc(s.a)}</td><td>${esc(kls(s).join('/'))}</td><td><button data-a="sedit" data-id="${s.id}">✎</button> <button data-a="sdel" data-id="${s.id}">✕</button></td></tr>`).join('')+'</table>'+(L.length?'':'<p class="mu">Geen leerlingen.</p>')}
@@ -102,9 +129,7 @@ function beheerder(){const c=cfg||{days:[],start:'16:00',end:'19:00'},ks=[...new
  <p class="mu">Importeren (CSV): <code>voornaam;achternaam;klas</code> (in twee klassen: <code>5A/6A</code>)</p><input type="file" accept=".csv,.txt" data-a="csvS"></div>
  <div class="card"><h3 style="margin-top:0">Leerlingen (${stu.length})</h3><div class="row"><input id="q" placeholder="Zoeken…" value="${esc(q)}" data-a="q" style="width:160px"><select id="kf" data-a="kf"><option value="">Alle klassen</option>${ks.map(k=>`<option ${k===kf?'selected':''}>${esc(k)}</option>`).join('')}</select>
  <button data-a="sdelsel">Verwijder geselecteerde (${sel.size})</button>${kf?`<button data-a="sdelklas">Verwijder klas ${esc(kf)}</button>`:''}<button data-a="sdelall">Alles verwijderen</button></div><div class="grid" id="sl">${studList()}</div></div>`,
- afs:`<div class="card"><h3 style="margin-top:0">Afspraken (${apps.length})</h3><div class="row"><button data-a="aexp">Exporteer CSV</button><button data-a="aclear">Alle afspraken wissen</button></div>
- <p class="mu">${tlist.map(t=>esc(t.naam)+': '+apps.filter(a=>a.tid===t.id).length).join(' · ')}</p>
- <div class="grid"><table><tr><th>Datum</th><th>Tijd</th><th>Leerkracht</th><th>Kind</th><th></th></tr>${apps.map(a=>`<tr><td>${dl(a.d)}</td><td>${a.tm}</td><td>${esc(tname(a.tid))}</td><td>${esc(a.name)}</td><td><button data-a="adel" data-id="${a.id}">✕</button></td></tr>`).join('')}</table></div>${apps.length?'':'<p class="mu">Nog geen afspraken.</p>'}</div>`};
+ afs:afsTab()};
  return bar+T[atab]}
 function render(){$('#who').innerHTML=me?`${me.role} <button data-a="out">Uitloggen</button>`:'';
  $('#app').innerHTML=!me?login():me.role==='ouder'?ouder():me.role==='leerkracht'?leerkracht():beheerder()}
@@ -112,7 +137,10 @@ const saveCfg=()=>setDoc(doc(db,'config','main'),cfg);
 const loadT=async()=>{tlist=(await getDocs(collection(db,'teachers'))).docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>kl(a).localeCompare(kl(b)))};
 const loadS=async()=>{stu=(await getDocs(collection(db,'students'))).docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.klas+a.a+a.v).localeCompare(b.klas+b.a+b.v))};
 const loadC=async()=>{clsMap={};(await getDocs(collection(db,'classes'))).forEach(d=>clsMap[d.id]=d.data())};
-const loadA=async()=>{apps=(await getDocs(collection(db,'private'))).docs.map(d=>{const[tid,dd,h]=d.id.split('_');return{id:d.id,name:d.data().name,tid,student:d.data().student,d:dd,tm:h.slice(0,2)+':'+h.slice(2)}}).sort((a,b)=>(a.d+a.tm).localeCompare(b.d+b.tm))};
+const loadSl=async()=>{slAll={};(await getDocs(collection(db,'slots'))).forEach(d=>slAll[d.id]=d.data())};
+const loadSch=async()=>{sch={};(await getDocs(collection(db,'schedules'))).forEach(d=>sch[d.id]=d.data().days||{})};
+const loadAll=async()=>{await Promise.all([loadT(),loadS(),loadC(),loadA(),loadSl(),loadSch()])};
+const loadA=async()=>{apps=(await getDocs(collection(db,'private'))).docs.map(d=>{const[tid,dd,h]=d.id.split('_');return{id:d.id,name:d.data().name,tid,student:d.data().student,aan:!!d.data().aanwezig,d:dd,tm:h.slice(0,2)+':'+h.slice(2)}}).sort((a,b)=>(a.d+a.tm).localeCompare(b.d+b.tm))};
 const tname=id=>{const t=tlist.find(t=>t.id===id);return t?t.naam+' ('+kl(t)+')':'?'};
 const hashOf=(v,a)=>sha(norm(v)+'|'+norm(a));
 const chunks=(a,n)=>{const r=[];for(let i=0;i<a.length;i+=n)r.push(a.slice(i,i+n));return r};
@@ -160,9 +188,14 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a==='dayadd'){const d=$('#nd').value;cfg=cfg||{days:[],start:'16:00',end:'19:00'};if(d&&!cfg.days.some(x=>x.d===d)){cfg.days.push({d,open:true});cfg.days.sort((x,y)=>x.d<y.d?-1:1);await saveCfg()}}
  else if(a==='daydel'){cfg.days.splice(b.dataset.i,1);await saveCfg()}
  else if(a==='hours'){const s=$('#st').value,n=$('#en').value;cfg=cfg||{days:[]};if(s&&n&&mins(s)<mins(n)){cfg.start=s;cfg.end=n;await saveCfg()}}
- else if(a==='atab'){atab=b.dataset.t;msg='';if(atab==='leer')await loadT();if(atab==='klas'){await loadT();await loadS();await loadC()}if(atab==='leerl')await loadS();if(atab==='afs'){await loadT();await loadA()}}
+ else if(a==='atab'){atab=b.dataset.t;msg='';if(atab==='leer')await loadT();if(atab==='klas'){await loadT();await loadS();await loadC()}if(atab==='leerl')await loadS();if(atab==='afs'){await loadAll()}}
  else if(a==='ics'){const l=document.createElement('a');l.href=URL.createObjectURL(new Blob([ics(myApps())],{type:'text/calendar'}));l.download='oudercontact.ics';l.click()}
  else if(a==='trol'){const t=tlist.find(x=>x.id===b.dataset.id),v=prompt('Functie die ouders naast de naam zien (leeg laten = geen), bv. turnleerkracht, zorgcoördinator',t.rol||'');if(v!==null){await setRol(t,v.trim());msg='Functie bewaard.'}}
+ else if(a==='stab'){stab=b.dataset.t}
+ else if(a==='refresh'){await loadAll();msg='Vernieuwd.'}
+ else if(a==='tobel'){bkf=b.dataset.k;bsf='bel';stab='bel'}
+ else if(a==='print'){window.print()}
+ else if(a==='bexp'){const L=bellRows(),csv='Achternaam;Voornaam;Klas;Status;Afspraken;Nog geen afspraak bij\n'+L.map(x=>[x.a,x.v,kl(x),stL[x.st],x.mine.map(a=>tn(a.tid)+': '+a.d+' '+a.tm).join(' | '),x.miss.map(tn).join(', ')].join(';')).join('\n'),l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));l.download='leerlingen-overzicht.csv';l.click()}
  else if(a==='hadd'){const d=b.dataset.d,B=blocksOf(me.uid,d),xe=mins(cfg.xend||'20:00'),st=mins(B.length?B[B.length-1].b:cfg.start),en=Math.min(st+60,xe);if(en-st<15)msg='Geen ruimte meer voor een extra blok (pas eerst een ander blok aan).';else await putDay(d,[...B,{a:hm(st),b:hm(en)}])}
  else if(a==='hdel'){const d=b.dataset.d;await putDay(d,blocksOf(me.uid,d).filter((_,i)=>i!==+b.dataset.i))}
  else if(a==='hreset'){await setDoc(doc(db,'schedules',me.uid),{days:{}});msg='Uren teruggezet naar standaard.'}
@@ -181,10 +214,12 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a==='sdelall'){if(stu.length&&confirm('ALLE '+stu.length+' leerlingen verwijderen?'))await delS(stu.map(s=>s.id))}
  else if(a==='adel'){const x=apps.find(y=>y.id===b.dataset.id);if(confirm('Afspraak van '+x.name+' annuleren?')){await delApp(x);await loadA();msg='Afspraak geannuleerd.'}}
  else if(a==='aclear'){if(apps.length&&confirm('ALLE '+apps.length+' afspraken wissen?')){for(const ch of chunks(apps,120)){const bt=writeBatch(db);ch.forEach(x=>{bt.delete(doc(db,'slots',x.id));bt.delete(doc(db,'private',x.id));bt.delete(doc(db,'bookings',x.student+'_'+x.tid))});await bt.commit()}await loadA();msg='Alle afspraken gewist.'}}
- else if(a==='aexp'){const csv='Datum;Tijd;Klas;Leerkracht;Kind\n'+apps.map(x=>{const t=tlist.find(y=>y.id===x.tid)||{};return[x.d,x.tm,t.naam?kl(t):'',t.naam,x.name].join(';')}).join('\n'),l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));l.download='afspraken.csv';l.click()}
+ else if(a==='aexp'){const csv='Datum;Tijd;Klas;Leerkracht;Kind;Aanwezig\n'+apps.map(x=>{const t=tlist.find(y=>y.id===x.tid)||{};return[x.d,x.tm,t.naam?kl(t):'',t.naam,x.name,x.aan?'ja':'nee'].join(';')}).join('\n'),l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));l.download='afspraken.csv';l.click()}
  }catch(er){msg=errT(er)}render()});
 document.addEventListener('change',async e=>{const b=e.target,a=b.dataset.a;if(b.dataset.h){await saveHours(b.dataset.d);return}if(!a)return;
- try{if(a==='titu'){const k=b.dataset.k,c=clsMap[k];await setDoc(doc(db,'classes',k),{teachers:c.teachers||[],titu:b.value||null});await loadC();msg='Titularis bewaard.';render();return}
+ try{if(a==='bkf'||a==='bsf'||a==='atf'){if(a==='bkf')bkf=b.value;if(a==='bsf')bsf=b.value;if(a==='atf')atf=b.value;render();return}
+ if(a==='pres'||a==='apres'){const id=a==='pres'?b.dataset.k:b.dataset.id;await updateDoc(doc(db,'private',id),{aanwezig:b.checked});const x=apps.find(y=>y.id===id);if(x)x.aan=b.checked;render();return}
+ if(a==='titu'){const k=b.dataset.k,c=clsMap[k];await setDoc(doc(db,'classes',k),{teachers:c.teachers||[],titu:b.value||null});await loadC();msg='Titularis bewaard.';render();return}
  if(a==='turn'){const t=tlist.find(x=>x.id===b.dataset.id);await setRol(t,b.checked?'Turnleerkracht':'');msg=b.checked?t.naam+' is nu turnleerkracht.':'Functie verwijderd.';render();return}
  if(a==='kf'){kf=b.value;sel.clear();render();return}
  if(a==='sel'){b.checked?sel.add(b.dataset.id):sel.delete(b.dataset.id);render();return}
@@ -192,6 +227,7 @@ document.addEventListener('change',async e=>{const b=e.target,a=b.dataset.a;if(b
  if(a==='dayopen'){cfg.days[b.dataset.i].open=b.checked;await saveCfg()}
  if(a==='csvT'||a==='csvS'){const f=b.files[0];if(!f)return;msg='Bezig…';render();const t=await f.text();await(a==='csvT'?importT(t):importS(t))}}
  catch(er){msg=errT(er)}render()});
-document.addEventListener('input',e=>{if(e.target.dataset.a==='q'){q=e.target.value;$('#sl').innerHTML=studList()}});
+document.addEventListener('input',e=>{if(e.target.dataset.a==='bq'){bq=e.target.value;$('#bl').innerHTML=bellList()}
+if(e.target.dataset.a==='q'){q=e.target.value;$('#sl').innerHTML=studList()}});
 render();
 </script></body></html>
