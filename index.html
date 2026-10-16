@@ -79,14 +79,17 @@ function mijn(){const L=myApps();
  return`<div class="card"><h3 style="margin-top:0">Mijn afspraken</h3>${lines.map(x=>`<div>📅 ${esc(x)}</div>`).join('')}<div class="row" style="margin-top:10px"><button class="pr" data-a="ics">Zet in mijn agenda</button><a class="btn" href="mailto:?subject=${encodeURIComponent('Afspraken oudercontacten')}&amp;body=${encodeURIComponent(body)}">Mail dit overzicht naar mezelf</a></div><p class="mu">Je krijgt geen automatische bevestigingsmail. Bewaar je afspraken met één van deze knoppen.</p></div>`}
 function ouder(){return`<div class="card"><h2 style="margin-top:0">Hallo ouder van ${esc(me.v)} ${esc(me.a)}</h2>${!me.teachers.length?'<p class="err">Voor deze klas is nog geen leerkracht ingesteld.</p>':!cfg?'<p class="mu">De inschrijvingen zijn nog niet open.</p>':`<p class="mu">Klik op een groen vakje (15 minuten) om te reserveren. Je kan bij elke leerkracht één afspraak maken en die annuleren.</p><p class="err">${esc(msg)}</p>`}</div>`+(cfg?mijn():'')+(cfg?me.teachers.map(t=>`<div class="card"><h3 style="margin-top:0">${esc(t.naam)}${t.titu?' <span class="tag">titularis</span>':''}${t.rol?' <span class="tag">'+esc(t.rol)+'</span>':''} · ${esc(t.kl.join('/'))}</h3>${grid(t.uid,'ouder')}</div>`).join(''):'')}
 function leerkracht(){return`<div class="card"><h2 style="margin-top:0">${esc(me.naam)} · klas ${esc(kl(me))}</h2><p class="err">${esc(msg)}</p>${!cfg?'<p class="mu">De beheerder heeft nog geen dagen ingesteld.</p>':'<p class="mu">Klik op een vakje om het kwartier open (✓) of niet beschikbaar (✗) te zetten. Ingeschreven kinderen zie je met naam.</p>'+grid(me.uid,'leerkracht')}</div>`+(cfg?hoursCard():'')}
-function hoursCard(){const xs=cfg.xstart||'07:00',xe=cfg.xend||'20:00';
- return`<div class="card"><h3 style="margin-top:0">Mijn uren per dag</h3><p class="mu">Wil je ook voor of na de gewone uren afspraken aanbieden, bijvoorbeeld 's morgens voor school én 's avonds? Je kan per dag meerdere blokken instellen (tussen ${xs} en ${xe}). Met <b>+ blok</b> voeg je een blok toe, met ✕ verwijder je er een. Ouders zien enkel de kwartieren binnen je blokken. Standaard: ${cfg.start}–${cfg.end}. Een wijziging wordt meteen bewaard.</p>`+cfg.days.filter(x=>x.open).map(x=>{const B=blocksOf(me.uid,x.d);return`<div class="row"><b style="width:110px">${dl(x.d)}</b>${B.map((q,i)=>`<span>van <input type="time" data-h="a" data-d="${x.d}" data-i="${i}" value="${q.a}" min="${xs}" max="${xe}" step="900"> tot <input type="time" data-h="b" data-d="${x.d}" data-i="${i}" value="${q.b}" min="${xs}" max="${xe}" step="900"> <button data-a="hdel" data-d="${x.d}" data-i="${i}">✕</button></span>`).join('')}<button data-a="hadd" data-d="${x.d}">+ blok</button>${B.length?'':'<span class="mu">geen uren op deze dag</span>'}</div>`}).join('')+`<div class="row"><button data-a="hreset">Alles terugzetten naar standaard</button></div></div>`}
+let drafts={};
+const xr=()=>{const xs=cfg.xstart||'07:00',xe=cfg.xend||'20:00';return[mins(xs)<mins(cfg.start)?xs:cfg.start,mins(xe)>mins(cfg.end)?xe:cfg.end]};
+const readDay=d=>{const A=[...document.querySelectorAll('[data-h="a"][data-d="'+d+'"]')],Z=[...document.querySelectorAll('[data-h="b"][data-d="'+d+'"]')];return A.map((e,i)=>({a:e.value,b:Z[i].value}))};
+function hoursCard(){const[xs,xe]=xr();
+ return`<div class="card"><h3 style="margin-top:0">Mijn uren per dag</h3><p class="mu">Wil je ook voor of na de gewone uren afspraken aanbieden, bijvoorbeeld 's morgens voor school én 's avonds? Je kan per dag meerdere blokken instellen (tussen ${xs} en ${xe}). Pas de uren aan, voeg met <b>+ blok</b> een blok toe of verwijder er een met ✕, en klik daarna bij die dag op <b>Opslaan</b>. Ouders zien enkel de kwartieren binnen je blokken. Standaard: ${cfg.start}–${cfg.end}.</p>`+cfg.days.filter(x=>x.open).map(x=>{const B=drafts[x.d]||blocksOf(me.uid,x.d);return`<div class="row"><b style="width:110px">${dl(x.d)}</b>${B.map((q,i)=>`<span>van <input type="time" data-h="a" data-d="${x.d}" value="${q.a}" step="900"> tot <input type="time" data-h="b" data-d="${x.d}" value="${q.b}" step="900"> <button data-a="hdel" data-d="${x.d}" data-i="${i}">✕</button></span>`).join('')}<button data-a="hadd" data-d="${x.d}">+ blok</button>${B.length?'':'<span class="mu">geen uren op deze dag</span>'}<button data-a="hsave" data-d="${x.d}" class="${drafts[x.d]?'pr':''}">Opslaan</button>${drafts[x.d]?`<button data-a="hundo" data-d="${x.d}">↺ ongedaan</button>`:''}</div>`}).join('')+`<div class="row"><button data-a="hreset">Alles terugzetten naar standaard</button></div></div>`}
 const putDay=(d,B)=>setDoc(doc(db,'schedules',me.uid),{days:{...(sch[me.uid]||{}),[d]:B}});
-async function saveHours(d){try{const xs=cfg.xstart||'07:00',xe=cfg.xend||'20:00',A=[...document.querySelectorAll('[data-h="a"][data-d="'+d+'"]')],Z=[...document.querySelectorAll('[data-h="b"][data-d="'+d+'"]')],B=A.map((e,i)=>({a:e.value,b:Z[i].value})).sort((p,q)=>mins(p.a||'00:00')-mins(q.a||'00:00'));
+async function saveHours(d){try{const[xs,xe]=xr(),B=[...(drafts[d]||blocksOf(me.uid,d))].sort((p,q)=>mins(p.a||'00:00')-mins(q.a||'00:00'));
  if(B.some(q=>!q.a||!q.b||mins(q.a)>=mins(q.b)))msg='Bij elk blok moet het einduur na het beginuur liggen.';
  else if(B.some(q=>mins(q.a)<mins(xs)||mins(q.b)>mins(xe)))msg='Kies uren tussen '+xs+' en '+xe+'.';
  else if(B.some((q,i)=>i&&mins(q.a)<mins(B[i-1].b)))msg='Blokken mogen elkaar niet overlappen.';
- else{await putDay(d,B);msg='Uren bewaard voor '+dl(d)+'.'}}catch(er){msg=errT(er)}render()}
+ else{await putDay(d,B);delete drafts[d];msg='Uren bewaard voor '+dl(d)+'.'}}catch(er){msg=errT(er)}}
 const stL={niet:'Niet ingeschreven',deels:'Gedeeltelijk',volledig:'Volledig',geen:'Geen leerkracht in klas'};
 const tn=id=>{const t=tlist.find(x=>x.id===id);return t?t.naam:'?'};
 function rows(){const by={};apps.forEach(a=>(by[a.student]=by[a.student]||[]).push(a));
@@ -178,7 +181,7 @@ async function importS(txt){const rows=parseCSV(txt,3);for(const ch of chunks(ro
  for(const[v,a,k]of ch)b.set(doc(db,'students',await hashOf(v,a)),{v,a,klas:parseKl(k).join('/'),klassen:parseKl(k)});await b.commit()}await loadS();msg=rows.length+' leerlingen geïmporteerd.'}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]');if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;const a=b.dataset.a,k=b.dataset.k;
  try{if(a==='tab'){tab=b.dataset.t;msg=''}
- else if(a==='out'){stop();await signOut(auth);me=null;msg='';slots={};priv={};bk={}}
+ else if(a==='out'){stop();await signOut(auth);me=null;msg='';slots={};priv={};bk={};drafts={}}
  else if(a==='login'){msg='';b.disabled=true;await doLogin()}
  else if(a==='tog'){b.disabled=true;b.dataset.st?await deleteDoc(doc(db,'slots',k)):await setDoc(doc(db,'slots',k),{status:'blocked',tid:me.uid})}
  else if(a==='book'){msg='';const tid=k.split('_')[0],tt=k.split('_').slice(1).join('_');
@@ -196,9 +199,13 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a==='tobel'){bkf=b.dataset.k;bsf='bel';stab='bel'}
  else if(a==='print'){window.print()}
  else if(a==='bexp'){const L=bellRows(),csv='Achternaam;Voornaam;Klas;Status;Afspraken;Nog geen afspraak bij\n'+L.map(x=>[x.a,x.v,kl(x),stL[x.st],x.mine.map(a=>tn(a.tid)+': '+a.d+' '+a.tm).join(' | '),x.miss.map(tn).join(', ')].join(';')).join('\n'),l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));l.download='leerlingen-overzicht.csv';l.click()}
- else if(a==='hadd'){const d=b.dataset.d,B=blocksOf(me.uid,d),xe=mins(cfg.xend||'20:00'),st=mins(B.length?B[B.length-1].b:cfg.start),en=Math.min(st+60,xe);if(en-st<15)msg='Geen ruimte meer voor een extra blok (pas eerst een ander blok aan).';else await putDay(d,[...B,{a:hm(st),b:hm(en)}])}
- else if(a==='hdel'){const d=b.dataset.d;await putDay(d,blocksOf(me.uid,d).filter((_,i)=>i!==+b.dataset.i))}
- else if(a==='hreset'){await setDoc(doc(db,'schedules',me.uid),{days:{}});msg='Uren teruggezet naar standaard.'}
+ else if(a==='hadd'){const d=b.dataset.d,[xs,xe]=xr(),B=[...(drafts[d]||blocksOf(me.uid,d))],S=B.filter(q=>q.a&&q.b);let f=null;
+  for(const L of[60,30,15]){for(let st=mins(xs);st+L<=mins(xe);st+=15)if(!S.some(q=>st<mins(q.b)&&st+L>mins(q.a))){f=[st,st+L];break}if(f)break}
+  if(!f)msg='Geen vrije plaats meer voor een extra blok.';else drafts[d]=[...B,{a:hm(f[0]),b:hm(f[1])}]}
+ else if(a==='hdel'){const d=b.dataset.d;drafts[d]=(drafts[d]||blocksOf(me.uid,d)).filter((_,i)=>i!==+b.dataset.i)}
+ else if(a==='hsave'){await saveHours(b.dataset.d)}
+ else if(a==='hundo'){delete drafts[b.dataset.d]}
+ else if(a==='hreset'){await setDoc(doc(db,'schedules',me.uid),{days:{}});drafts={};msg='Uren teruggezet naar standaard.'}
  else if(a==='xhours'){const x1=$('#xs').value,x2=$('#xe').value;cfg=cfg||{days:[],start:'16:00',end:'19:00'};if(x1&&x2&&mins(x1)<mins(x2)){cfg.xstart=x1;cfg.xend=x2;await saveCfg();msg='Opgeslagen.'}}
  else if(a==='repair'){await repair()}
  else if(a==='day'){const d=b.dataset.d,ids=timesFor(me.uid,d).map(t=>sid(me.uid,d,t)),fr=ids.filter(i=>!slots[i]),bt=writeBatch(db);fr.length?fr.forEach(i=>bt.set(doc(db,'slots',i),{status:'blocked',tid:me.uid})):ids.filter(i=>slots[i]==='blocked').forEach(i=>bt.delete(doc(db,'slots',i)));await bt.commit()}
@@ -216,7 +223,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a==='aclear'){if(apps.length&&confirm('ALLE '+apps.length+' afspraken wissen?')){for(const ch of chunks(apps,120)){const bt=writeBatch(db);ch.forEach(x=>{bt.delete(doc(db,'slots',x.id));bt.delete(doc(db,'private',x.id));bt.delete(doc(db,'bookings',x.student+'_'+x.tid))});await bt.commit()}await loadA();msg='Alle afspraken gewist.'}}
  else if(a==='aexp'){const csv='Datum;Tijd;Klas;Leerkracht;Kind;Aanwezig\n'+apps.map(x=>{const t=tlist.find(y=>y.id===x.tid)||{};return[x.d,x.tm,t.naam?kl(t):'',t.naam,x.name,x.aan?'ja':'nee'].join(';')}).join('\n'),l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));l.download='afspraken.csv';l.click()}
  }catch(er){msg=errT(er)}render()});
-document.addEventListener('change',async e=>{const b=e.target,a=b.dataset.a;if(b.dataset.h){await saveHours(b.dataset.d);return}if(!a)return;
+document.addEventListener('change',async e=>{const b=e.target,a=b.dataset.a;if(b.dataset.h){const d=b.dataset.d;drafts[d]=readDay(d);const sb=document.querySelector('[data-a="hsave"][data-d="'+d+'"]');if(sb)sb.classList.add('pr');return}if(!a)return;
  try{if(a==='bkf'||a==='bsf'||a==='atf'){if(a==='bkf')bkf=b.value;if(a==='bsf')bsf=b.value;if(a==='atf')atf=b.value;render();return}
  if(a==='pres'||a==='apres'){const id=a==='pres'?b.dataset.k:b.dataset.id;await updateDoc(doc(db,'private',id),{aanwezig:b.checked});const x=apps.find(y=>y.id===id);if(x)x.aan=b.checked;render();return}
  if(a==='titu'){const k=b.dataset.k,c=clsMap[k];await setDoc(doc(db,'classes',k),{teachers:c.teachers||[],titu:b.value||null});await loadC();msg='Titularis bewaard.';render();return}
