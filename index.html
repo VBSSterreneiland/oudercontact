@@ -208,10 +208,13 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a==='tobel'){bkf=b.dataset.k;bsf='bel';stab='bel'}
  else if(a==='print'){window.print()}
  else if(a==='bexp'){const L=bellRows(),csv='Achternaam;Voornaam;Klas;Status;Afspraken;Nog geen afspraak bij\n'+L.map(x=>[x.a,x.v,kl(x),stL[x.st],x.mine.map(a=>tn(a.tid)+': '+a.d+' '+a.tm).join(' | '),x.miss.map(tn).join(', ')].join(';')).join('\n'),l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));l.download='leerlingen-overzicht.csv';l.click()}
- else if(a==='tpick'){pick={k:b.dataset.k};pq='';if(!stu.length)await loadS();setTimeout(()=>{const i=$('#pq');if(i)i.focus()},60)}
+ else if(a==='tpick'){pick={k:b.dataset.k};pq='';if(!stu.length){try{await loadS()}catch(er){console.error(er);pick=null;msg='Kan de leerlingenlijst niet laden. Controleer of de nieuwste regels (firestore.rules) in Firebase gepubliceerd zijn.';alert(msg)}}setTimeout(()=>{const i=$('#pq');if(i)i.focus()},60)}
  else if(a==='pickclose'){pick=null}
- else if(a==='pickstu'){const x=stu.find(y=>y.id===b.dataset.id),k=pick.k,tid=k.split('_')[0];pick=null;const bt=writeBatch(db);bt.set(doc(db,'slots',k),{status:'booked',tid});bt.set(doc(db,'private',k),{name:x.v+' '+x.a,tid,student:x.id});bt.set(doc(db,'bookings',x.id+'_'+tid),{slot:k});
-  try{await bt.commit();msg=x.v+' '+x.a+' is ingeschreven.'}catch(er){msg=er.code==='permission-denied'?x.v+' '+x.a+' heeft al een afspraak bij deze leerkracht, of dit kwartier is net bezet.':errT(er)}}
+ else if(a==='pickstu'){const x=stu.find(y=>y.id===b.dataset.id),k=pick.k,tid=k.split('_')[0],nm=x.v+' '+x.a;pick=null;
+  try{const ex=await getDoc(doc(db,'bookings',x.id+'_'+tid));
+   if(ex.exists()){msg=nm+' heeft al een afspraak bij deze leerkracht. Verwijder die eerst.';alert(msg)}
+   else{const bt=writeBatch(db);bt.set(doc(db,'slots',k),{status:'booked',tid});bt.set(doc(db,'private',k),{name:nm,tid,student:x.id});bt.set(doc(db,'bookings',x.id+'_'+tid),{slot:k});await bt.commit();msg=nm+' is ingeschreven.'}}
+  catch(er){console.error(er);msg=er.code==='permission-denied'?'Niet gelukt: de beveiliging weigert dit. Mogelijke oorzaken: het kwartier is net bezet, of de nieuwste regels (firestore.rules) zijn nog niet gepubliceerd in Firebase.':errT(er);alert(msg)}}
  else if(a==='tdelapp'){const k=b.dataset.k,tid=k.split('_')[0];if(confirm('Afspraak van '+(priv[k]||'dit kind')+' verwijderen?')&&confirm('Ben je zeker dat je deze afspraak wil wissen? Dit kan niet ongedaan worden gemaakt.')){const bt=writeBatch(db);bt.delete(doc(db,'slots',k));bt.delete(doc(db,'private',k));if(ps[k])bt.delete(doc(db,'bookings',ps[k]+'_'+tid));await bt.commit();msg='Afspraak verwijderd.'}}
  else if(a==='hadd'){const d=b.dataset.d,[xs,xe]=xr(),B=[...(drafts[d]||blocksOf(hT(),d))],S=B.filter(q=>q.a&&q.b);let f=null;
   for(const L of[60,30,15]){for(let st=mins(xs);st+L<=mins(xe);st+=15)if(!S.some(q=>st<mins(q.b)&&st+L>mins(q.a))){f=[st,st+L];break}if(f)break}
